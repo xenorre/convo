@@ -38,8 +38,9 @@ const getAllowedOrigins = () => {
 
 const isOriginAllowed = (origin, allowedOrigins) => {
   if (!origin) {
-    // Allow requests with no origin (mobile apps, server-to-server, etc.)
-    return ENV.NODE_ENV === 'development';
+    // Allow requests with no Origin header (direct navigations, mobile apps, server-to-server)
+    // CSRF protection still guards unsafe methods via token pairing.
+    return true;
   }
   
   return allowedOrigins.some(allowedOrigin => {
