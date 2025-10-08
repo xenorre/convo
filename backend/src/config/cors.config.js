@@ -142,9 +142,9 @@ export const securityHeaders = {
       styleSrc: ["'self'", "'unsafe-inline'", "https:"],
       imgSrc: ["'self'", "data:", "https:"],
       fontSrc: ["'self'", "data:", "https:"],
-      connectSrc: ENV.NODE_ENV === 'development'
-        ? ["'self'", "ws:", "wss:", "http:", "https:"]
-        : ["'self'", "wss:", "https:"],
+      connectSrc: ENV.NODE_ENV === 'development' 
+        ? ["'self'", "ws:", "wss:", "http:", "https:", "data:"]
+        : ["'self'", "wss:", "https:", "data:"],
       mediaSrc: ["'self'"],
       objectSrc: ["'none'"],
       frameSrc: ["'self'"],
@@ -155,7 +155,7 @@ export const securityHeaders = {
   },
   
   // Cross-Origin policies
-  crossOriginEmbedderPolicy: ENV.NODE_ENV === 'production',
+  crossOriginEmbedderPolicy: false,
   crossOriginOpenerPolicy: { policy: "same-origin" },
   crossOriginResourcePolicy: { policy: "same-origin" },
   

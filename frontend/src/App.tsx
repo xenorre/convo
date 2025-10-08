@@ -1,21 +1,29 @@
-import { Route, Routes } from 'react-router';
-import ChatPage from '@/pages/ChatPage';
-import Login from '@/pages/Login';
-import SignUp from '@/pages/SignUp';
-import RootLayout from '@/RootLayout';
-import { Toaster } from 'react-hot-toast';
-import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { ConnectionStatus } from '@/components/ConnectionStatus';
-import { useEffect } from 'react';
-import { useAuthStore } from './store/useAuthStore';
-import PageLoader from './components/PageLoader';
+import { Route, Routes } from "react-router";
+import ChatPage from "@/pages/ChatPage";
+import Login from "@/pages/Login";
+import SignUp from "@/pages/SignUp";
+import RootLayout from "@/RootLayout";
+import { Toaster } from "react-hot-toast";
+import { ProtectedRoute, PublicRoute } from "@/components/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ConnectionStatus } from "@/components/ConnectionStatus";
+import { useEffect } from "react";
+import { useAuthStore } from "./store/useAuthStore";
+import { useChatStore } from "@/store/useChatStore";
+import PageLoader from "./components/PageLoader";
 
 function App() {
-  const { checkAuth, isCheckingAuth } = useAuthStore();
+  const { checkAuth, isCheckingAuth, socket } = useAuthStore();
+  const { bindSocketOnce } = useChatStore();
+
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
+
+  // Bind global socket handlers once a socket exists
+  useEffect(() => {
+    if (socket) bindSocketOnce();
+  }, [socket, bindSocketOnce]);
 
   if (isCheckingAuth) return <PageLoader />;
 

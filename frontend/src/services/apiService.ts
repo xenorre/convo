@@ -303,10 +303,19 @@ export class ApiService {
   async uploadFile<T = unknown>(
     url: string,
     file: File,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    fieldName: string = 'file',
+    additionalData?: Record<string, string>
   ): Promise<T> {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append(fieldName, file);
+    
+    // Add any additional form fields
+    if (additionalData) {
+      Object.entries(additionalData).forEach(([key, value]) => {
+        formData.append(key, value);
+      });
+    }
 
     const response = await this.instance.post<T>(url, formData, {
       headers: {

@@ -3,6 +3,7 @@ import {
   getChats,
   getMessagesById,
   sendMessage,
+  markRead,
 } from "#src/controllers/message.controller.js";
 import { protectRoute } from "#src/middleware/auth.middleware.js";
 import {
@@ -20,6 +21,7 @@ router.use(protectRoute);
 router.get("/contacts", getAllContacts);
 router.get("/chats", getChats);
 router.get("/:id", validateObjectIdParam("id"), getMessagesById);
+router.post("/mark-read/:id", validateObjectIdParam("id"), markRead);
 router.post(
   "/send/:id",
   validateObjectIdParam("id"),

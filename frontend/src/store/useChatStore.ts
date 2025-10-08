@@ -38,11 +38,13 @@ const normalizeMessage = (msg: any): Message => ({
 export const useChatStore = create<ChatStore>((set, get) => ({
   allContacts: [],
   chats: [],
+  unreadCounts: {},
   messages: [],
   activeTab: "chats",
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
+  socketBound: false,
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedUser: (selectedUser) => {
@@ -70,14 +72,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ isUsersLoading: true });
     try {
       const response = await apiService.get<ChatsResponse>("/messages/chats");
-      // Extract chats array from API response
       const chatsData = response?.chats || [];
       const chats = Array.isArray(chatsData) ? chatsData : [];
-      set({ chats });
+      const unreadCounts = response?.unreadCounts || {};
+      set({ chats, unreadCounts });
     } catch (e) {
       handleStoreError(e, "Failed to load chat partners");
-      // Set empty array on error to prevent map errors
-      set({ chats: [] });
+      set({ chats: [], unreadCounts: {} });
     } finally {
       set({ isUsersLoading: false });
     }
@@ -97,6 +98,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set({ messages: [] });
     } finally {
       set({ isMessagesLoading: false });
+    }
+  },
+
+  markRead: async (userId) => {
+    try {
+      await apiService.post(`/messages/mark-read/${userId}`, {});
+      set((state) => ({
+        unreadCounts: { ...state.unreadCounts, [userId]: 0 },
+      }));
+    } catch (e) {
+      // Non-fatal; ignore errors
     }
   },
 
@@ -129,26 +141,35 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       let res;
 
       if (messageData.image) {
-        // Convert base64 to File object for FormData
-        const formData = new FormData();
-
-        if (messageData.text) {
-          formData.append("text", messageData.text);
-        }
-
-        // Convert base64 to blob
-        const response = await fetch(messageData.image);
-        const blob = await response.blob();
+        // Convert base64 data URL to Blob without fetch (CSP-friendly)
+        const toBlob = (dataUrl: string) => {
+          const [meta, b64] = dataUrl.split(',');
+          const mime = /data:(.*?);base64/.exec(meta)?.[1] || 'image/jpeg';
+          const binary = atob(b64);
+          const len = binary.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+          return new Blob([bytes], { type: mime });
+        };
+        const blob = toBlob(messageData.image);
 
         // Create file from blob
         const file = new File([blob], "image.jpg", {
           type: blob.type || "image/jpeg",
         });
-        formData.append("messageFile", file);
+
+        // Prepare additional data for the form
+        const additionalData: Record<string, string> = {};
+        if (messageData.text) {
+          additionalData.text = messageData.text;
+        }
 
         res = await apiService.uploadFile(
           `/messages/send/${selectedUser._id}`,
-          file
+          file,
+          undefined, // no progress callback
+          'messageFile', // correct field name expected by backend
+          additionalData // include text if provided
         );
       } else {
         // Text only - use JSON
@@ -179,37 +200,72 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  subscribeToMessages: () => {
-    const { selectedUser } = get();
-    if (!selectedUser) return;
-
+  // Bind once to global socket to update unread badges in real time
+  bindSocketOnce: () => {
+    const { socketBound } = get();
+    if (socketBound) return;
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
 
-    socket.on("newMessage", (newMessage: Message | { message: Message } | any) => {
-      // Handle wrapped message structure and normalize
+    socket.on("newMessage", (newMessage: any) => {
       const raw = (newMessage && typeof newMessage === 'object' && 'message' in newMessage)
-        ? (newMessage as { message: any }).message
+        ? newMessage.message
         : newMessage;
       const actualMessage = normalizeMessage(raw);
 
-      const currentMessages = get().messages;
+      const state = get();
+      const currentMessages = state.messages;
+      const selectedUser = state.selectedUser;
+      const chats = state.chats;
 
-      // Check if message already exists (to avoid duplicates)
-      const messageExists = currentMessages.some(
-        (msg) => msg._id === actualMessage._id
-      );
+      // Ensure the sender exists in chats; if not, add using provided snapshot (if any)
+      const senderId = actualMessage.senderId;
+      const hasChat = chats.some((c) => String(c._id) === senderId);
+      if (!hasChat && newMessage && newMessage.sender) {
+        const sender = newMessage.sender as { _id: string; fullName: string; profilePic: string };
+        set({ chats: [{ _id: sender._id, fullName: sender.fullName, profilePic: sender.profilePic } as any, ...chats] });
+      } else if (!hasChat) {
+        // Fallback: refresh chat partners list
+        get().getMyChatPartners().catch(() => {});
+      }
 
-      if (!messageExists) {
+      // Append to current conversation buffer only if this message is for the open chat
+      const messageExists = currentMessages.some((msg) => msg._id === actualMessage._id);
+      const isForOpenChat = selectedUser && actualMessage.senderId === String(selectedUser._id);
+      if (!messageExists && isForOpenChat) {
         set({ messages: [...currentMessages, actualMessage] });
       }
+
+      // Update unread counts or mark read
+      if (isForOpenChat) {
+        get().markRead(String(selectedUser._id));
+      } else {
+        set((s) => ({
+          unreadCounts: {
+            ...s.unreadCounts,
+            [senderId]: (s.unreadCounts[senderId] || 0) + 1,
+          },
+        }));
+
+        // Show a friendly toast notification for the new message (no JSX in .ts file)
+        const senderName = newMessage?.sender?.fullName || 'New message';
+        const preview = actualMessage.text
+          ? (actualMessage.text.length > 60 ? actualMessage.text.slice(0, 57) + '…' : actualMessage.text)
+          : 'Sent an attachment';
+        toast(`${senderName}: ${preview}`, { id: `msg-${actualMessage._id}`, duration: 4000, icon: '💬' });
+        
+      }
     });
+
+    set({ socketBound: true });
+  },
+
+  // Kept for compatibility; now ensures global binding exists
+  subscribeToMessages: () => {
+    get().bindSocketOnce();
   },
 
   unsubscribeFromMessage: () => {
-    const socket = useAuthStore.getState().socket;
-    if (!socket) return;
-
-    socket.off("newMessage");
+    // No-op: global socket handler remains bound for real-time updates
   },
 }));

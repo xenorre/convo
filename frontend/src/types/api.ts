@@ -32,6 +32,7 @@ export interface ChatsResponse {
     fullName: string;
     profilePic: string;
   }>;
+  unreadCounts?: Record<string, number>;
   requestId: string;
 }
 

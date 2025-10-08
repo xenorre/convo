@@ -11,6 +11,7 @@ function ChatContainer() {
     messages,
     selectedUser,
     getMessagesByUserId,
+    markRead,
     isMessagesLoading,
     subscribeToMessages,
     unsubscribeFromMessage,
@@ -20,7 +21,10 @@ function ChatContainer() {
 
   useEffect(() => {
     if (selectedUser && authUser && selectedUser._id) {
-      getMessagesByUserId(selectedUser._id.toString());
+      getMessagesByUserId(selectedUser._id.toString()).then(() => {
+        // Mark read after messages are loaded
+        markRead(selectedUser._id.toString());
+      });
       subscribeToMessages();
     }
 

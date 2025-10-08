@@ -26,11 +26,12 @@ export const uploadFile = async (
     await s3Storage.send(command);
 
     // Build public URL
+    let supabaseProjectId = null;
     const fileUrl = ENV.STORAGE_PUBLIC_URL
       ? `${ENV.STORAGE_PUBLIC_URL.replace(/\/$/, "")}/${ENV.STORAGE_BUCKET_NAME}/${uniqueFileName}`
       : (() => {
           const urlParts = ENV.STORAGE_URL.split(".");
-          const supabaseProjectId = urlParts[0].split("//")[1];
+          supabaseProjectId = urlParts[0].split("//")[1];
           return `https://${supabaseProjectId}.supabase.co/storage/v1/object/public/${ENV.STORAGE_BUCKET_NAME}/${uniqueFileName}`;
         })();
 

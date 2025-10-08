@@ -103,9 +103,14 @@ export const sendMessage = async (req, res) => {
       requestId: req.requestId,
     });
 
-    // Emit to the user's room for cross-instance delivery
+    // Emit to the user's room for cross-instance delivery, include sender snapshot for UI
     io.to(`user:${receiverId}`).emit("newMessage", {
       message: newMessage,
+      sender: {
+        _id: req.user._id,
+        fullName: req.user.fullName,
+        profilePic: req.user.profilePic,
+      },
     });
 
     logger.info("New message event emitted to receiver via Socket.IO", {
@@ -127,6 +132,21 @@ export const sendMessage = async (req, res) => {
     res
       .status(500)
       .json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+export const markRead = async (req, res) => {
+  try {
+    const myId = req.user._id;
+    const { id: senderId } = req.params;
+    const result = await Message.updateMany(
+      { receiverId: myId, senderId, readAt: null },
+      { $set: { readAt: new Date() } }
+    );
+    res.status(200).json({ updated: result.modifiedCount || 0, requestId: req.requestId });
+  } catch (e) {
+    logger.error("Failed to mark messages as read", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
   }
 };
 
@@ -152,8 +172,18 @@ export const getChats = async (req, res) => {
       _id: { $in: chatPartnersIds },
     }).select("-password -email -createdAt -updatedAt");
 
+    const unreadAgg = await Message.aggregate([
+      { $match: { receiverId: myId, readAt: null } },
+      { $group: { _id: "$senderId", count: { $sum: 1 } } },
+    ]);
+    const unreadCounts = unreadAgg.reduce((acc, row) => {
+      acc[String(row._id)] = row.count;
+      return acc;
+    }, {});
+
     res.status(200).json({
       chats: chatPartners,
+      unreadCounts,
       requestId: req.requestId,
     });
   } catch (e) {

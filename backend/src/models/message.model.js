@@ -19,6 +19,11 @@ const messages = new mongoose.Schema(
     image: {
       type: String, // This field will store file URLs (images, documents, etc.)
     },
+    readAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true }
 );
