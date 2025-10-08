@@ -3,6 +3,13 @@
 # --- Build frontend ---
 FROM node:20 AS frontend-build
 WORKDIR /app/frontend
+
+# Provide production-friendly defaults for Vite at build time
+ARG VITE_API_URL=/api
+ARG VITE_WS_URL=
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_WS_URL=${VITE_WS_URL}
+
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend .

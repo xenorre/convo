@@ -7,15 +7,22 @@ const getEnvVar = (key: string, defaultValue?: string): string => {
   return value || '';
 };
 
+const MODE = import.meta.env.MODE;
+const isProduction = MODE === 'production';
+
+// Compute defaults with production-aware fallbacks
+const defaultApi = isProduction ? `${window.location.origin}/api` : 'http://localhost:3000/api';
+const defaultWs = isProduction ? window.location.origin : 'http://localhost:3000';
+
 export const env = {
   // API Configuration
-  apiUrl: getEnvVar('VITE_API_URL', 'http://localhost:3000/api'),
-  wsUrl: getEnvVar('VITE_WS_URL', 'http://localhost:3000'),
+  apiUrl: getEnvVar('VITE_API_URL', defaultApi),
+  wsUrl: getEnvVar('VITE_WS_URL', defaultWs),
   
   // Environment
-  nodeEnv: getEnvVar('VITE_NODE_ENV', import.meta.env.MODE),
-  isDevelopment: import.meta.env.MODE === 'development',
-  isProduction: import.meta.env.MODE === 'production',
+  nodeEnv: getEnvVar('VITE_NODE_ENV', MODE),
+  isDevelopment: MODE === 'development',
+  isProduction,
   
   // Error Logging
   sentryDsn: getEnvVar('VITE_SENTRY_DSN'),
