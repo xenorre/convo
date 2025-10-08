@@ -1,0 +1,88 @@
+{
+  "name": "convo-backend",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "build": "echo 'No build step needed for Node.js'",
+    "test": "echo 'Add tests here'",
+    "lint": "echo 'Add linting here'",
+    "lint:fix": "echo 'Add lint fixing here'",
+    "docker:build": "docker build -t convo-backend .",
+    "docker:run": "docker run -d -p 3000:3000 --name convo-backend-app convo-backend",
+    "docker:stop": "docker stop convo-backend-app && docker rm convo-backend-app",
+    "compose:up": "docker-compose up -d",
+    "compose:down": "docker-compose down",
+    "compose:logs": "docker-compose logs -f",
+    "health": "curl -f http://localhost:3000/healthz || exit 1",
+    "clean": "rm -rf node_modules package-lock.json",
+    "scripts:dev": "./scripts/dev.sh",
+    "scripts:test": "./scripts/test.sh",
+    "scripts:deploy": "./scripts/deploy.sh",
+    "scripts:quickstart": "./scripts/quickstart.sh",
+    "fullstack:up": "docker-compose -f docker-compose.fullstack.yml up -d",
+    "fullstack:down": "docker-compose -f docker-compose.fullstack.yml down",
+    "fullstack:logs": "docker-compose -f docker-compose.fullstack.yml logs -f",
+    "production:up": "docker-compose -f docker-compose.production.yml up -d",
+    "production:down": "docker-compose -f docker-compose.production.yml down",
+    "production:logs": "docker-compose -f docker-compose.production.yml logs -f"
+  },
+  "imports": {
+    "#src/*": "./src/*",
+    "#config/*": "./src/config/*",
+    "#middleware/*": "./src/middleware/*",
+    "#models/*": "./src/models/*",
+    "#routes/*": "./src/routes/*",
+    "#controllers/*": "./src/controllers/*",
+    "#services/*": "./src/services/*",
+    "#utils/*": "./src/utils/*",
+    "#validations/*": "./src/validations/*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xenorre/convo-backend.git"
+  },
+  "keywords": [
+    "nodejs",
+    "express",
+    "mongodb",
+    "socket.io",
+    "backend",
+    "api"
+  ],
+  "author": "xenorre",
+  "license": "ISC",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bugs": {
+    "url": "https://github.com/xenorre/convo-backend/issues"
+  },
+  "homepage": "https://github.com/xenorre/convo-backend#readme",
+  "description": "ConvoChat Backend API with Socket.io real-time messaging",
+  "dependencies": {
+    "@arcjet/analyze": "^1.0.0-beta.12",
+    "@arcjet/inspect": "^1.0.0-beta.12",
+    "@arcjet/node": "^1.0.0-beta.12",
+    "@aws-sdk/client-s3": "^3.901.0",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.19.0",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "redis": "^4.6.13",
+    "resend": "^6.1.2",
+    "socket.io": "^4.8.1",
+    "uuid": "^13.0.0",
+    "winston": "^3.18.3",
+    "zod": "^4.1.11"
+  }
+}

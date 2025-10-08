@@ -1,0 +1,10 @@
+**/.DS_Store
+**/node_modules
+**/dist
+**/logs
+**/.git
+**/.gitignore
+**/.env
+**/.env.*
+**/temp
+**/uploads

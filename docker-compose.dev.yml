@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: convo-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: convo-redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    image: node:20-alpine
+    container_name: convo-backend-dev
+    working_dir: /app
+    command: sh -lc "npm ci || npm install; exec npm run dev"
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: mongodb://mongo:27017/convo
+      JWT_SECRET: dev_secret_change_me
+      CLIENT_URL: http://localhost:5173
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: debug
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - mongo
+      - redis
+
+  frontend:
+    image: node:20
+    container_name: convo-frontend-dev
+    working_dir: /app
+    command: sh -lc "npm ci || npm install; exec npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000/api
+      VITE_WS_URL: http://localhost:3000
+      VITE_NODE_ENV: development
+      # Better file watching inside Docker on macOS/Windows
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+
+volumes:
+  mongo_data: {}
