@@ -75,9 +75,11 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
 
-app.get("/", (req, res) => {
-  res.status(200).send("Welcome to Convo API!");
-});
+if (ENV.NODE_ENV !== "production") {
+  app.get("/", (req, res) => {
+    res.status(200).send("Welcome to Convo API!");
+  });
+}
 
 // Serve frontend in production if present
 const __filename = fileURLToPath(import.meta.url);
