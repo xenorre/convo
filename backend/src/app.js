@@ -11,6 +11,9 @@ import {
   trustedProxies,
 } from "#config/cors.config.js";
 import mongoose from "mongoose";
+import path from "path";
+import { fileURLToPath } from "url";
+import { ENV } from "#config/env.js";
 
 import { requestId } from "#src/middleware/requestId.middleware.js";
 import { errorHandler } from "#src/middleware/error.middleware.js";
@@ -75,6 +78,18 @@ app.use("/api/messages", messageRoutes);
 app.get("/", (req, res) => {
   res.status(200).send("Welcome to Convo API!");
 });
+
+// Serve frontend in production if present
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.resolve(__dirname, "../public");
+if (ENV.NODE_ENV === "production") {
+  app.use(express.static(publicDir));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/socket.io")) return next();
+    res.sendFile(path.join(publicDir, "index.html"));
+  });
+}
 
 // 404
 app.use((req, res) => {
