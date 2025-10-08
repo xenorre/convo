@@ -85,8 +85,9 @@ const __dirname = path.dirname(__filename);
 const publicDir = path.resolve(__dirname, "../public");
 if (ENV.NODE_ENV === "production") {
   app.use(express.static(publicDir));
-  app.get("*", (req, res, next) => {
-    if (req.path.startsWith("/api") || req.path.startsWith("/socket.io")) return next();
+  // Match any path that does NOT start with /api or /socket.io
+  const spaFallback = /^(?!\/api|\/socket\.io).*/;
+  app.get(spaFallback, (req, res) => {
     res.sendFile(path.join(publicDir, "index.html"));
   });
 }
