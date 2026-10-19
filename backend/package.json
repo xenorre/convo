@@ -6,7 +6,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "build": "echo 'No build step needed for Node.js'",
-    "test": "echo 'Add tests here'",
+    "test": "node --test",
     "lint": "echo 'Add linting here'",
     "lint:fix": "echo 'Add lint fixing here'",
     "docker:build": "docker build -t convo-backend .",

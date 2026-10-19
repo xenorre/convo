@@ -10,7 +10,7 @@ import { useEffect } from "react";
 import { useAuthStore } from "./store/useAuthStore";
 import { useChatStore } from "@/store/useChatStore";
 import PageLoader from "./components/PageLoader";
-import { Toaster } from "react-hot-toast";
+import { AppToaster } from "./components/AppToaster";
 
 function App() {
   const { checkAuth, isCheckingAuth, socket, authUser } = useAuthStore();
@@ -73,7 +73,7 @@ function App() {
         </Routes>
       </ErrorBoundary>
       {authUser ? <ConnectionStatus /> : null}
-      <Toaster />
+      <AppToaster />
     </>
   );
 }

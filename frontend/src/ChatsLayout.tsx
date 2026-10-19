@@ -6,17 +6,9 @@ import ContactsList from "./components/ContactsList";
 import NoConversationPlaceholder from "./components/NoConversationPlaceholder";
 import ProfileHeader from "./components/ProfileHeader";
 import { useChatStore } from "./store/useChatStore";
-import { useAuthStore } from "./store/useAuthStore";
-import { useEffect } from "react";
 
 function ChatsLayout() {
-  const { activeTab, selectedUser, setSelectedUser } = useChatStore();
-  const { authUser } = useAuthStore();
-
-  // Reset selected user when auth user changes (login/logout)
-  useEffect(() => {
-    setSelectedUser(null);
-  }, [authUser, setSelectedUser]);
+  const { activeTab, selectedUser } = useChatStore();
 
   return (
     <div className="relative w-full max-w-6xl lg:h-[700px] h-[650px]">

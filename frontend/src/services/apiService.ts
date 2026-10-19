@@ -2,6 +2,25 @@ import axios from 'axios';
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { env } from '../config/env';
 import { logger } from './logger';
+import {
+  getAuthSessionVersion,
+  isCurrentAuthSession,
+  isSessionError,
+  reportAuthenticationFailure,
+  SESSION_EXPIRED_MESSAGE,
+  SESSION_REVOKED_MESSAGE,
+} from './authSession';
+
+type SessionRequestConfig = AxiosRequestConfig & {
+  _authSessionVersion?: number;
+  _csrfRetry?: boolean;
+};
+
+const staleSessionError = (): ApiError => ({
+  status: 0,
+  code: 'STALE_AUTH_RESPONSE',
+  message: 'This response belongs to an earlier session.',
+});
 
 export interface ApiError {
   message: string;
@@ -32,8 +51,13 @@ export class ApiService {
     // Request interceptor
     this.instance.interceptors.request.use(
       async config => {
+        const sessionConfig = config as SessionRequestConfig;
+        sessionConfig._authSessionVersion ??= getAuthSessionVersion();
         // Add CSRF token to requests
         await this.ensureCSRFToken();
+        if (!isCurrentAuthSession(sessionConfig._authSessionVersion)) {
+          return Promise.reject(staleSessionError());
+        }
         if (this.csrfToken && this.isWriteOperation(config.method)) {
           config.headers['x-csrf-token'] = this.csrfToken;
         }
@@ -65,6 +89,10 @@ export class ApiService {
     // Response interceptor
     this.instance.interceptors.response.use(
       response => {
+        const sessionVersion = (response.config as SessionRequestConfig)._authSessionVersion;
+        if (sessionVersion !== undefined && !isCurrentAuthSession(sessionVersion)) {
+          return Promise.reject(staleSessionError());
+        }
         if (env.isDevelopment) {
           logger.info(`✅ API Response: ${response.status} ${response.config.url}`, {
             component: 'ApiService',
@@ -84,12 +112,18 @@ export class ApiService {
         return response;
       },
       async error => {
+        if (isSessionError(error)) return Promise.reject(error);
         const originalRequest = error.config;
+        const sessionVersion = (originalRequest as SessionRequestConfig | undefined)?._authSessionVersion;
+        if (sessionVersion !== undefined && !isCurrentAuthSession(sessionVersion)) {
+          return Promise.reject(staleSessionError());
+        }
 
         // Handle CSRF token errors
         if (
           error.response?.status === 403 &&
           error.response?.data?.message?.includes('CSRF') &&
+          originalRequest &&
           !originalRequest._csrfRetry
         ) {
           logger.warn('CSRF token invalid, refreshing...');
@@ -110,9 +144,21 @@ export class ApiService {
 
         // Handle authentication errors
         if (error.response?.status === 401) {
-          logger.warn('Authentication failed, redirecting to login...');
-          // You can dispatch a logout action here if using a state manager
-          return Promise.reject(this.createApiError(error));
+          const apiError = this.createApiError(error);
+          const path = originalRequest?.url?.split('?')[0]?.replace(/\/$/, '');
+          // Failed credentials and manual logout do not expire another session.
+          if (!/\/auth\/(login|sign-up|logout)$/.test(path || '')) {
+            apiError.code = apiError.code === 'SESSION_REVOKED' ? 'SESSION_REVOKED' : 'SESSION_EXPIRED';
+            apiError.message = apiError.code === 'SESSION_REVOKED'
+              ? error.response.data?.error || error.response.data?.message || SESSION_REVOKED_MESSAGE
+              : SESSION_EXPIRED_MESSAGE;
+            reportAuthenticationFailure({
+              version: sessionVersion ?? getAuthSessionVersion(),
+              code: apiError.code,
+              message: apiError.message,
+            });
+          }
+          return Promise.reject(apiError);
         }
 
         if (env.isDevelopment) {
@@ -229,7 +275,7 @@ export class ApiService {
       const axiosError = error as {
         response?: {
           status?: number;
-          data?: { message?: string; error?: string };
+          data?: { message?: string; error?: string; code?: string };
         };
         request?: unknown;
         message?: string;
@@ -243,6 +289,7 @@ export class ApiService {
           axiosError.response.data?.error ||
           `HTTP ${axiosError.response.status || 500}`;
         apiError.details = axiosError.response.data;
+        apiError.code = axiosError.response.data?.code;
       } else if (axiosError.request) {
         // Network error
         apiError.message = 'Network error - please check your connection';
@@ -259,8 +306,12 @@ export class ApiService {
   }
 
   // Public API methods
+  private sessionConfig(config?: AxiosRequestConfig): SessionRequestConfig {
+    return { ...config, _authSessionVersion: getAuthSessionVersion() };
+  }
+
   async get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.get<T>(url, config);
+    const response = await this.instance.get<T>(url, this.sessionConfig(config));
     return response.data;
   }
 
@@ -269,7 +320,7 @@ export class ApiService {
     data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<T> {
-    const response = await this.instance.post<T>(url, data, config);
+    const response = await this.instance.post<T>(url, data, this.sessionConfig(config));
     return response.data;
   }
 
@@ -278,7 +329,7 @@ export class ApiService {
     data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<T> {
-    const response = await this.instance.put<T>(url, data, config);
+    const response = await this.instance.put<T>(url, data, this.sessionConfig(config));
     return response.data;
   }
 
@@ -287,7 +338,7 @@ export class ApiService {
     data?: unknown,
     config?: AxiosRequestConfig
   ): Promise<T> {
-    const response = await this.instance.patch<T>(url, data, config);
+    const response = await this.instance.patch<T>(url, data, this.sessionConfig(config));
     return response.data;
   }
 
@@ -295,7 +346,7 @@ export class ApiService {
     url: string,
     config?: AxiosRequestConfig
   ): Promise<T> {
-    const response = await this.instance.delete<T>(url, config);
+    const response = await this.instance.delete<T>(url, this.sessionConfig(config));
     return response.data;
   }
 
@@ -317,7 +368,7 @@ export class ApiService {
       });
     }
 
-    const response = await this.instance.post<T>(url, formData, {
+    const response = await this.instance.post<T>(url, formData, this.sessionConfig({
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -329,7 +380,7 @@ export class ApiService {
           onProgress(progress);
         }
       },
-    });
+    }));
 
     return response.data;
   }

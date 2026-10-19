@@ -1,7 +1,7 @@
 import { connectDB } from "./config/db.js";
 import { ENV, validateEnvOrThrow } from "#config/env.js";
 import logger from "#config/logger.js";
-import { server } from "./config/socket.js";
+import { server, initializeSocketInfrastructure } from "./config/socket.js";
 import "./app.js";
 import mongoose from "mongoose";
 
@@ -11,6 +11,7 @@ const start = async () => {
   try {
     validateEnvOrThrow();
     await connectDB();
+    await initializeSocketInfrastructure();
     server.listen(PORT, () => {
       logger.info(`Server is running on http://localhost:${PORT}`);
     });

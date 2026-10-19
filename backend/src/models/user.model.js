@@ -16,6 +16,10 @@ const users = new mongoose.Schema(
       required: true,
       minLength: 6,
     },
+    activeSessionId: {
+      type: String,
+      select: false,
+    },
     profilePic: {
       type: String,
       default:

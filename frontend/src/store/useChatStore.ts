@@ -4,7 +4,10 @@ import toast from "react-hot-toast";
 import { create } from "zustand";
 import { useAuthStore } from "./useAuthStore";
 import type { Message } from "@/types/message";
+import type { Contact } from "@/types/auth";
 import { handleStoreError } from "@/utils/errorHandling";
+import { notifyIncomingMessage } from "@/utils/messageNotifications";
+import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
 import type { ContactsResponse, ChatsResponse, MessagesResponse } from "@/types/api";
 
 // Normalize messages coming from various sources (REST/socket) to ensure
@@ -45,6 +48,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isUsersLoading: false,
   isMessagesLoading: false,
   socketBound: false,
+  boundSocket: null,
+  unbindSocket: null,
+
+  resetChat: () => {
+    get().unbindSocket?.();
+    set(useChatStore.getInitialState());
+  },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedUser: (selectedUser) => {
@@ -52,58 +62,69 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   getAllContacts: async () => {
+    const sessionVersion = getAuthSessionVersion();
     set({ isUsersLoading: true });
     try {
       const response = await apiService.get<ContactsResponse>("/messages/contacts");
+      if (!isCurrentAuthSession(sessionVersion)) return;
       // Extract users array from API response
       const users = response?.users || [];
       const allContacts = Array.isArray(users) ? users : [];
       set({ allContacts });
     } catch (e) {
+      if (!isCurrentAuthSession(sessionVersion)) return;
       handleStoreError(e, "Failed to load contacts");
       // Set empty array on error to prevent map errors
       set({ allContacts: [] });
     } finally {
-      set({ isUsersLoading: false });
+      if (isCurrentAuthSession(sessionVersion)) set({ isUsersLoading: false });
     }
   },
 
   getMyChatPartners: async () => {
+    const sessionVersion = getAuthSessionVersion();
     set({ isUsersLoading: true });
     try {
       const response = await apiService.get<ChatsResponse>("/messages/chats");
+      if (!isCurrentAuthSession(sessionVersion)) return;
       const chatsData = response?.chats || [];
       const chats = Array.isArray(chatsData) ? chatsData : [];
       const unreadCounts = response?.unreadCounts || {};
       set({ chats, unreadCounts });
     } catch (e) {
+      if (!isCurrentAuthSession(sessionVersion)) return;
       handleStoreError(e, "Failed to load chat partners");
       set({ chats: [], unreadCounts: {} });
     } finally {
-      set({ isUsersLoading: false });
+      if (isCurrentAuthSession(sessionVersion)) set({ isUsersLoading: false });
     }
   },
 
   getMessagesByUserId: async (userId) => {
+    const sessionVersion = getAuthSessionVersion();
     set({ isMessagesLoading: true });
     try {
       const response = await apiService.get<MessagesResponse>(`/messages/${userId}`);
+      if (!isCurrentAuthSession(sessionVersion)) return;
       // Extract messages array from API response
       const messagesData = response?.messages || [];
       const messages = Array.isArray(messagesData) ? messagesData : [];
       set({ messages });
     } catch (e) {
+      if (!isCurrentAuthSession(sessionVersion)) return;
       handleStoreError(e, "Failed to load messages");
       // Set empty array on error to prevent map errors
       set({ messages: [] });
     } finally {
-      set({ isMessagesLoading: false });
+      if (isCurrentAuthSession(sessionVersion)) set({ isMessagesLoading: false });
     }
   },
 
   markRead: async (userId) => {
+    const sessionVersion = getAuthSessionVersion();
     try {
       await apiService.post(`/messages/mark-read/${userId}`, {});
+      if (!isCurrentAuthSession(sessionVersion)) return;
       set((state) => ({
         unreadCounts: { ...state.unreadCounts, [userId]: 0 },
       }));
@@ -113,6 +134,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   sendMessage: async (messageData) => {
+    const sessionVersion = getAuthSessionVersion();
     const { selectedUser, messages } = get();
     const { authUser } = useAuthStore.getState();
 
@@ -178,6 +200,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         });
       }
 
+      if (!isCurrentAuthSession(sessionVersion)) return;
+
       // Handle different API response structures
       const messageFromAPI = (res && typeof res === 'object' && 'message' in res) 
         ? (res as { message: unknown }).message 
@@ -191,6 +215,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         ),
       }));
     } catch (e) {
+      if (!isCurrentAuthSession(sessionVersion)) return;
       handleStoreError(e, "Failed to send message");
 
       // Remove optimistic message on error
@@ -202,12 +227,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   // Bind once to global socket to update unread badges in real time
   bindSocketOnce: () => {
-    const { socketBound } = get();
-    if (socketBound) return;
     const socket = useAuthStore.getState().socket;
     if (!socket) return;
+    if (get().boundSocket === socket && get().socketBound) return;
+    get().unbindSocket?.();
+    const sessionVersion = getAuthSessionVersion();
+    const isActiveSocket = () => isCurrentAuthSession(sessionVersion)
+      && get().boundSocket === socket && useAuthStore.getState().socket === socket
+      && Boolean(useAuthStore.getState().authUser);
 
-    socket.on("newMessage", (newMessage: any) => {
+    const onMessage = (newMessage: any) => {
+      if (!isActiveSocket()) return;
       const raw = (newMessage && typeof newMessage === 'object' && 'message' in newMessage)
         ? newMessage.message
         : newMessage;
@@ -220,10 +250,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       // Ensure the sender exists in chats; if not, add using provided snapshot (if any)
       const senderId = actualMessage.senderId;
+      const knownSender = chats.find(chat => String(chat._id) === senderId)
+        || state.allContacts.find(contact => String(contact._id) === senderId);
+      const senderSnapshot = newMessage?.sender
+        || (typeof raw.senderId === 'object' ? raw.senderId : undefined);
+      const sender: Contact = {
+        _id: senderId,
+        fullName: senderSnapshot?.fullName || knownSender?.fullName || 'New message',
+        profilePic: senderSnapshot?.profilePic || knownSender?.profilePic || '',
+      };
       const hasChat = chats.some((c) => String(c._id) === senderId);
-      if (!hasChat && newMessage && newMessage.sender) {
-        const sender = newMessage.sender as { _id: string; fullName: string; profilePic: string };
-        set({ chats: [{ _id: sender._id, fullName: sender.fullName, profilePic: sender.profilePic } as any, ...chats] });
+      if (!hasChat && senderSnapshot) {
+        set({ chats: [sender, ...chats] });
       } else if (!hasChat) {
         // Fallback: refresh chat partners list
         get().getMyChatPartners().catch(() => {});
@@ -247,17 +285,54 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           },
         }));
 
-        // Show a friendly toast notification for the new message (no JSX in .ts file)
-        const senderName = newMessage?.sender?.fullName || 'New message';
         const preview = actualMessage.text
           ? (actualMessage.text.length > 60 ? actualMessage.text.slice(0, 57) + '…' : actualMessage.text)
           : 'Sent an attachment';
-        toast(`${senderName}: ${preview}`, { id: `msg-${actualMessage._id}`, duration: 4000, icon: '💬' });
-        
+        notifyIncomingMessage({
+          messageId: actualMessage._id,
+          senderName: sender.fullName,
+          preview,
+          onOpen: () => {
+            if (!isCurrentAuthSession(sessionVersion)) return;
+            const currentState = get();
+            const contact = currentState.chats.find(chat => String(chat._id) === senderId)
+              || currentState.allContacts.find(user => String(user._id) === senderId)
+              || sender;
+            set({ selectedUser: contact, activeTab: 'chats' });
+          },
+        });
       }
-    });
+    };
 
-    set({ socketBound: true });
+    // Re-fetch missed messages after reconnect; revoked sockets must never
+    // recover buffered packets before the server revalidates their session.
+    let hasConnected = socket.connected;
+    const onConnect = () => {
+      if (!isActiveSocket()) return;
+      if (hasConnected) {
+        void get().getMyChatPartners();
+        const userId = get().selectedUser?._id;
+        if (userId) {
+          void get().getMessagesByUserId(userId).then(() => {
+            if (isActiveSocket() && get().selectedUser?._id === userId) {
+              void get().markRead(userId);
+            }
+          });
+        }
+      }
+      hasConnected = true;
+    };
+
+    socket.on("newMessage", onMessage);
+    socket.on("connect", onConnect);
+    set({
+      socketBound: true,
+      boundSocket: socket,
+      unbindSocket: () => {
+        socket.off("newMessage", onMessage);
+        socket.off("connect", onConnect);
+      },
+    });
   },
 
   // Kept for compatibility; now ensures global binding exists

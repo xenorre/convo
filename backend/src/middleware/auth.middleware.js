@@ -2,6 +2,11 @@ import User from "#src/models/user.model.js";
 import { cookies } from "#src/utils/cookies.js";
 import { jwttoken } from "#src/utils/jwt.js";
 import logger from "#config/logger.js";
+import {
+  hasActiveSession,
+  publicSessionUser,
+  SESSION_REVOKED,
+} from "#services/session.service.js";
 
 export const protectRoute = async (req, res, next) => {
   try {
@@ -28,11 +33,18 @@ export const protectRoute = async (req, res, next) => {
         .json({ error: "Unauthorized - Invalid token payload" });
     }
 
-    const user = await User.findById(decoded.id).select("-password");
+    const user = await User.findById(decoded.id).select("-password +activeSessionId");
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    req.user = user;
-    req.user.id = String(user._id);
+    if (!hasActiveSession(user, decoded.sid)) {
+      return res.status(401).json({
+        error: SESSION_REVOKED.message,
+        code: SESSION_REVOKED.code,
+      });
+    }
+
+    req.user = publicSessionUser(user);
+    req.sessionId = decoded.sid;
     next();
   } catch (error) {
     logger.error("Auth middleware error", { error: error.message });

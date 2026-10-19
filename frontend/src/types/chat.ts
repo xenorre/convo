@@ -1,5 +1,6 @@
 import type { Contact } from "./auth";
 import type { Message } from "./message";
+import type { AppSocket } from "./socket";
 
 export interface ChatStore {
   allContacts: Contact[];
@@ -11,6 +12,9 @@ export interface ChatStore {
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
   socketBound: boolean;
+  boundSocket: AppSocket | null;
+  unbindSocket: (() => void) | null;
+  resetChat: () => void;
   setActiveTab: (tab: "chats" | "contacts") => void;
   setSelectedUser: (user: Contact | null) => void;
   getAllContacts: () => Promise<void>;

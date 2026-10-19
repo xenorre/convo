@@ -7,6 +7,7 @@ Production-ready Node.js/Express API with MongoDB and Socket.IO for real-time me
 - Express 5 API with structured middleware and route modules
 - Real-time messaging via Socket.IO (rooms: user:<id>)
 - JWT auth in httpOnly cookie; protected routes middleware
+- One active login session per account, with immediate sign-out of replaced devices
 - CSRF protection for unsafe methods (x-csrf-token + cookie)
 - CORS with environment-based allowlists and strict security headers
 - Request ID propagation and structured logging (winston + morgan)
@@ -94,6 +95,7 @@ package.json scripts (selected):
 
 - npm run dev — node --watch src/index.js
 - npm start — node src/index.js
+- npm test — Node built-in session/authentication tests (mocked database, no external services)
 - npm run docker:build / docker:run / docker:stop
 - npm run compose:up|down|logs
 - npm run fullstack:up|down|logs
@@ -107,7 +109,7 @@ Helper scripts (scripts/):
 - test.sh — lint/tests/coverage/security (runs what’s available)
 - deploy.sh — build/tag/push and local deploy via compose.production
 
-Note: test/lint/type-check scripts in package.json are placeholders by default; wire your preferred tools to enable them (test.sh will call them if present).
+Note: lint scripts remain placeholders; the session/authentication tests run with `npm test`.
 
 ## API Overview
 
@@ -123,7 +125,7 @@ Auth (/api/auth)
 
 - POST /sign-up — { fullName, email, password }
 - POST /login — { email, password }
-- POST /logout — clears auth cookie
+- POST /logout — ends the current session and clears its auth cookie
 - GET /check — returns current user (requires auth)
 
 Users (/api/users)
@@ -147,6 +149,36 @@ Real-time (Socket.IO)
 - Rooms: server joins user to room user:<id>
 - Online Users: server emits getOnlineUsers with [userId]
 - New Message: server emits newMessage with payload { message }
+- Replaced session: server emits `session:revoked` with `{ code: "SESSION_REVOKED", message }`, then disconnects that session's sockets
+
+## Login sessions
+
+Every successful signup or login creates a fresh random session ID. Its JWT
+contains `sid`, and MongoDB stores the account's current ID in the hidden
+`activeSessionId` field. A newer login replaces that value atomically, so older
+tokens immediately fail protected HTTP requests and Socket.IO handshakes.
+Multiple tabs sharing the same cookie belong to the same session and remain
+connected together. An explicit new login also replaces an existing session in
+the same browser.
+
+For a replaced or legacy token, HTTP returns `401` with
+`{ code: "SESSION_REVOKED", error: "You have been signed out because your account was signed in on another device." }`.
+Socket.IO handshake errors put the same code and a `message` in `error.data`.
+Clients should clear their local authenticated state and show that message,
+without calling logout. Logout itself uses a conditional database update, so a
+delayed logout from an older token cannot invalidate a newer session or remove
+its browser cookie. Session IDs are excluded from user API responses.
+
+Existing tokens issued before this change have no `sid` and require one new
+login. Existing account documents need no migration; the next successful login
+creates their current session ID.
+
+Socket.IO connection-state recovery is disabled because it restores rooms and
+replays missed packets before authentication middleware. On reconnect, the
+frontend reloads conversations and messages through authenticated HTTP. If
+`REDIS_URL` is configured, the server initializes the Redis adapter and presence
+before accepting connections; all instances must share that Redis service for
+immediate cross-instance session revocation.
 
 Minimal client connect example (fetch CSRF then send):
 

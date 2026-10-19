@@ -21,7 +21,11 @@ export const cookies = {
   },
 
   clear: (res, name, options = {}) => {
-    res.clearCookie(name, { ...cookies.getOptions(), ...options });
+    const { maxAge, expires, ...clearOptions } = {
+      ...cookies.getOptions(),
+      ...options,
+    };
+    res.clearCookie(name, clearOptions);
   },
 
   get: (req, name) => {

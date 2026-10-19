@@ -6,13 +6,18 @@ import socketAuthMiddleware from "#src/middleware/socket.auth.middleware.js";
 import logger from "#config/logger.js";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
+import {
+  createSocketRegistry,
+  joinActiveSession,
+} from "#services/socket-session.service.js";
 
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  // Tag connections by user room for targeted delivery across instances
-  connectionStateRecovery: { maxDisconnectionDuration: 2 * 60 * 1000 },
+  // Do not enable connectionStateRecovery: Socket.IO restores rooms and replays
+  // packets before auth middleware, even with skipMiddlewares: false. The
+  // frontend reloads messages over authenticated HTTP after reconnecting.
   cors: {
     origin: function (origin, callback) {
       if (!origin) return callback(null, true);
@@ -36,97 +41,112 @@ const io = new Server(server, {
   },
 });
 
-// Optional: use Redis adapter when REDIS_URL is present
-(async () => {
-  if (ENV.REDIS_URL) {
-    try {
-      const pubClient = createClient({ url: ENV.REDIS_URL });
-      const subClient = pubClient.duplicate();
-      pubClient.on("error", (err) => logger.error("Redis pub client error", { error: err.message }));
-      subClient.on("error", (err) => logger.error("Redis sub client error", { error: err.message }));
-      await pubClient.connect();
-      await subClient.connect();
-      io.adapter(createAdapter(pubClient, subClient));
-      logger.info("Socket.IO Redis adapter connected");
-    } catch (err) {
-      logger.error("Failed to initialize Redis adapter for Socket.IO", { error: err.message });
-    }
-  }
-})();
-
 io.use(socketAuthMiddleware);
 
 export function getReceiverSocketId(userId) {
-  return userSocketMap[userId];
+  return userSockets.receiver(userId);
 }
 
-const userSocketMap = {};
+const userSockets = createSocketRegistry();
 
-// Optional presence via Redis
 let presenceClient = null;
-(async () => {
-  if (ENV.REDIS_URL) {
-    try {
-      presenceClient = createClient({ url: ENV.REDIS_URL });
-      presenceClient.on("error", (err) => logger.error("Redis presence client error", { error: err.message }));
-      await presenceClient.connect();
-      logger.info("Presence Redis client connected");
-    } catch (e) {
-      logger.error("Failed to connect Presence Redis client", { error: e.message });
-    }
-  }
-})();
+let infrastructureReady;
 
-const userRoom = (userId) => `user:${userId}`;
+export const initializeSocketInfrastructure = () => {
+  if (!infrastructureReady) {
+    infrastructureReady = (async () => {
+      if (!ENV.REDIS_URL) return;
+      const pubClient = createClient({ url: ENV.REDIS_URL });
+      const subClient = pubClient.duplicate();
+      const redisPresence = pubClient.duplicate();
+      const clients = [pubClient, subClient, redisPresence];
+      for (const client of clients) {
+        client.on("error", (error) => logger.error("Socket Redis client error", { error: error.message }));
+      }
+      try {
+        await Promise.all(clients.map((client) => client.connect()));
+        // Install the adapter before listening. Replacing it after connections
+        // exist would discard rooms used to revoke those sessions.
+        io.adapter(createAdapter(pubClient, subClient));
+        presenceClient = redisPresence;
+        logger.info("Socket.IO Redis adapter and presence connected");
+      } catch (error) {
+        await Promise.allSettled(clients.map((client) =>
+          client.isOpen ? client.disconnect() : Promise.resolve()
+        ));
+        throw error;
+      }
+    })();
+  }
+  return infrastructureReady;
+};
+
 const ONLINE_USERS_SET = "online_users";
 const USER_SOCKETS_PREFIX = "user_sockets:"; // user_sockets:<userId> is a set
 
-io.on("connection", (socket) => {
-  logger.info(`User connected: ${socket.user.fullName}`);
-
+io.on("connection", async (socket) => {
   const userId = socket.userId;
-  socket.join(userRoom(userId));
-
-  // Local cache for backward compatibility
-  userSocketMap[userId] = socket.id;
-
-  const updatePresenceOnConnect = async () => {
-    try {
-      if (presenceClient) {
-        await presenceClient.sAdd(`${USER_SOCKETS_PREFIX}${userId}`, socket.id);
-        await presenceClient.sAdd(ONLINE_USERS_SET, userId);
-        const users = await presenceClient.sMembers(ONLINE_USERS_SET);
-        io.emit("getOnlineUsers", users);
-      } else {
-        io.emit("getOnlineUsers", Object.keys(userSocketMap));
-      }
-    } catch (e) {
-      logger.error("Presence update (connect) failed", { error: e.message });
-    }
-  };
-
-  updatePresenceOnConnect();
+  let registered = false;
+  let presenceReady = Promise.resolve();
 
   socket.on("disconnect", async () => {
     logger.info(`User disconnected: ${socket.user.fullName}`);
-    delete userSocketMap[userId];
+    if (!registered) return;
+    userSockets.remove(userId, socket.id);
 
     try {
+      // A disconnect during Redis registration must remove the socket only
+      // after its pending registration has completed.
+      await presenceReady;
       if (presenceClient) {
-        await presenceClient.sRem(`${USER_SOCKETS_PREFIX}${userId}`, socket.id);
-        const remaining = await presenceClient.sCard(`${USER_SOCKETS_PREFIX}${userId}`);
-        if (remaining === 0) {
-          await presenceClient.sRem(ONLINE_USERS_SET, userId);
-        }
+        await presenceClient.eval(
+          `redis.call('SREM', KEYS[1], ARGV[1])
+           if redis.call('SCARD', KEYS[1]) == 0 then
+             redis.call('SREM', KEYS[2], ARGV[2])
+           end
+           return 1`,
+          {
+            keys: [`${USER_SOCKETS_PREFIX}${userId}`, ONLINE_USERS_SET],
+            arguments: [socket.id, userId],
+          }
+        );
         const users = await presenceClient.sMembers(ONLINE_USERS_SET);
         io.emit("getOnlineUsers", users);
       } else {
-        io.emit("getOnlineUsers", Object.keys(userSocketMap));
+        io.emit("getOnlineUsers", userSockets.onlineUsers());
       }
     } catch (e) {
       logger.error("Presence update (disconnect) failed", { error: e.message });
     }
   });
+
+  try {
+    if (!(await joinActiveSession(socket)) || !socket.connected) return;
+    logger.info(`User connected: ${socket.user.fullName}`);
+    userSockets.add(userId, socket.id);
+    registered = true;
+
+    presenceReady = (async () => {
+      try {
+        if (presenceClient) {
+          await presenceClient.multi()
+            .sAdd(`${USER_SOCKETS_PREFIX}${userId}`, socket.id)
+            .sAdd(ONLINE_USERS_SET, userId)
+            .exec();
+          const users = await presenceClient.sMembers(ONLINE_USERS_SET);
+          io.emit("getOnlineUsers", users);
+        } else {
+          io.emit("getOnlineUsers", userSockets.onlineUsers());
+        }
+      } catch (e) {
+        logger.error("Presence update (connect) failed", { error: e.message });
+      }
+    })();
+    await presenceReady;
+  } catch (error) {
+    logger.error("Socket session validation failed", { error: error.message });
+    socket.disconnect(true);
+  }
 });
 
 export { io, server, app };

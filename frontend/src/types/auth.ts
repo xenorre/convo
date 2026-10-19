@@ -37,7 +37,8 @@ export interface AuthState {
   signUp: (data: SignUpData) => Promise<void>;
 
   login: (data: LoginData) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  forceLogout: (message?: string, sessionVersion?: number) => void;
   connectSocket: () => void;
   disconnectSocket: () => void;
 }

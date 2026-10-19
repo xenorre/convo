@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { apiService } from '../services/apiService';
 import type { ApiError } from '../services/apiService';
 import toast from 'react-hot-toast';
+import { getAuthSessionVersion, isCurrentAuthSession, isSessionError } from '@/services/authSession';
 
 interface UseApiState {
   loading: boolean;
@@ -25,6 +26,7 @@ export function useApi() {
       requestFn: () => Promise<T>,
       options: UseApiOptions = {}
     ): Promise<T | null> => {
+      const sessionVersion = getAuthSessionVersion();
       const {
         showSuccessToast = false,
         showErrorToast = true,
@@ -35,6 +37,7 @@ export function useApi() {
 
       try {
         const result = await requestFn();
+        if (!isCurrentAuthSession(sessionVersion)) return null;
         
         if (showSuccessToast) {
           toast.success(successMessage);
@@ -43,10 +46,11 @@ export function useApi() {
         setState({ loading: false, error: null });
         return result;
       } catch (error) {
+        if (!isCurrentAuthSession(sessionVersion)) return null;
         const apiError = error as ApiError;
         setState({ loading: false, error: apiError });
 
-        if (showErrorToast) {
+        if (showErrorToast && !isSessionError(apiError)) {
           toast.error(apiError.message);
         }
 
@@ -98,16 +102,19 @@ export function useApi() {
   }, []);
 
   const refreshCSRFToken = useCallback(async () => {
+    const sessionVersion = getAuthSessionVersion();
     try {
       setState({ loading: true, error: null });
       await apiService.manuallyRefreshCSRFToken();
+      if (!isCurrentAuthSession(sessionVersion)) return false;
       toast.success('CSRF token refreshed successfully');
       setState({ loading: false, error: null });
       return true;
     } catch (error) {
+      if (!isCurrentAuthSession(sessionVersion)) return false;
       const apiError = error as ApiError;
       setState({ loading: false, error: apiError });
-      toast.error('Failed to refresh CSRF token: ' + apiError.message);
+      if (!isSessionError(apiError)) toast.error('Failed to refresh CSRF token: ' + apiError.message);
       return false;
     }
   }, []);

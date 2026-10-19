@@ -6,6 +6,21 @@ import { cookies } from "#utils/cookies.js";
 import { sendWelcomeEmail } from "#src/services/email.service.js";
 import { ENV } from "#config/env.js";
 import logger from "#config/logger.js";
+import {
+  activateSession,
+  createSessionId,
+  endSession,
+} from "#services/session.service.js";
+import { revokeSessionSockets } from "#services/socket-session.service.js";
+import { io } from "#config/socket.js";
+
+const startUserSession = async (user, res) => {
+  const sessionId = createSessionId();
+  const token = jwttoken.sign({ id: user.id, sid: sessionId });
+  const previousSessionId = await activateSession(user.id, sessionId);
+  revokeSessionSockets(io, user.id, previousSessionId);
+  cookies.set(res, "token", token);
+};
 
 export const signUp = async (req, res, next) => {
   try {
@@ -24,8 +39,7 @@ export const signUp = async (req, res, next) => {
     const user = await createUser({ fullName, email, password });
 
     if (user) {
-      const token = jwttoken.sign({ id: user.id });
-      cookies.set(res, "token", token);
+      await startUserSession(user, res);
     } else {
       return res
         .status(400)
@@ -83,8 +97,7 @@ export const login = async (req, res) => {
     const { email, password } = validationResult.data;
     const user = await authenticateUser({ email, password });
 
-    const token = jwttoken.sign({ id: user.id });
-    cookies.set(res, "token", token);
+    await startUserSession(user, res);
 
     res.status(200).json({
       message: "User logged in successfully",
@@ -113,20 +126,34 @@ export const logout = async (req, res) => {
   try {
     const token = cookies.get(req, "token");
     let userId = "unknown";
+    let clearCookie = true;
 
     if (token) {
+      let decoded;
       try {
-        const decoded = jwttoken.verify(token);
-        userId = decoded.id;
+        decoded = jwttoken.verify(token);
       } catch (tokenError) {
         logger.warn("Invalid token during sign-out", {
           requestId: req.requestId,
           error: tokenError.message,
         });
       }
+      if (decoded?.id) {
+        userId = decoded.id;
+        const ended = await endSession(decoded.id, decoded.sid);
+        // A late logout response from a replaced session must not remove a
+        // newer cookie that has since been set in this browser.
+        clearCookie = ended;
+        if (ended) {
+          revokeSessionSockets(io, decoded.id, decoded.sid, {
+            code: "SESSION_REVOKED",
+            message: "Your session has ended. Please sign in again.",
+          });
+        }
+      }
     }
 
-    cookies.clear(res, "token");
+    if (clearCookie) cookies.clear(res, "token");
 
     logger.info("User signed out successfully", {
       requestId: req.requestId,
