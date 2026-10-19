@@ -1,6 +1,7 @@
 import { AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { logger } from '@/services/logger';
+import { isSessionError } from '@/services/authSession';
 
 export interface ApiError {
   message: string;
@@ -20,6 +21,22 @@ export const createApiError = (error: unknown): ApiError => {
     };
   }
 
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string' &&
+    'status' in error &&
+    typeof error.status === 'number'
+  ) {
+    return {
+      message: error.message,
+      status: error.status,
+      code: 'code' in error && typeof error.code === 'string' ? error.code : undefined,
+      details: 'details' in error ? error.details : undefined,
+    };
+  }
+
   if (error instanceof Error) {
     return {
       message: error.message,
@@ -35,6 +52,7 @@ export const createApiError = (error: unknown): ApiError => {
 
 export const handleStoreError = (error: unknown, customMessage?: string, context?: { action?: string; component?: string }): ApiError => {
   const apiError = createApiError(error);
+  if (isSessionError(apiError)) return apiError;
   
   // Show user-friendly toast message
   const userMessage = customMessage || getUserFriendlyMessage(apiError);

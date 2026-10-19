@@ -1,99 +1,141 @@
 import { create } from 'zustand';
 import { apiService } from '@/services/apiService';
 import toast from 'react-hot-toast';
-import type { AuthState } from '@/types/auth';
+import type { AuthState, AuthUser } from '@/types/auth';
 import { io } from 'socket.io-client';
 import type { AppSocket } from '@/types/socket';
 import { env } from '@/config/env';
-import { handleStoreError, isAuthError } from '@/utils/errorHandling';
+import { createApiError, handleStoreError, isAuthError } from '@/utils/errorHandling';
 import type { AuthResponse } from '@/types/api';
+import {
+  advanceAuthSession,
+  getAuthSessionVersion,
+  isCurrentAuthSession,
+  registerAuthenticationFailureHandler,
+  SESSION_EXPIRED_MESSAGE,
+  SESSION_REVOKED_MESSAGE,
+} from '@/services/authSession';
+
+let latestAuthCheck = 0;
+let pendingLogout: Promise<void> | undefined;
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   authUser: null,
   isCheckingAuth: true,
   isSigningUp: false,
-
   isLoggingIn: false,
   socket: null,
   onlineUsers: [],
+
   checkAuth: async () => {
+    const sessionVersion = getAuthSessionVersion();
+    const request = ++latestAuthCheck;
+    const isCurrentCheck = () =>
+      isCurrentAuthSession(sessionVersion) && request === latestAuthCheck;
+
     try {
-      const data = await apiService.get<{
-        _id: string;
-        email: string;
-        fullName: string;
-        profilePic: string;
-      }>('/auth/check');
-      set({ authUser: data });
+      const data = await apiService.get<AuthUser>('/auth/check');
+      if (!isCurrentCheck()) return;
+      if (get().authUser && get().authUser?._id !== data._id) {
+        advanceAuthSession();
+        get().disconnectSocket();
+      }
+      set({ authUser: data, isCheckingAuth: false });
       get().connectSocket();
     } catch (e) {
-      const error = handleStoreError(e);
-      set({ authUser: null });
-
-      // Don't show error toast for auth check failures (silent)
-      if (!isAuthError(error)) {
-        console.error('Unexpected auth check error:', error);
+      if (!isCurrentCheck()) return;
+      const error = createApiError(e);
+      if (isAuthError(error)) {
+        if (get().authUser || error.code === 'SESSION_REVOKED') {
+          get().forceLogout(
+            error.code === 'SESSION_REVOKED' ? SESSION_REVOKED_MESSAGE : SESSION_EXPIRED_MESSAGE,
+            sessionVersion
+          );
+        } else {
+          set({ authUser: null });
+          get().disconnectSocket();
+        }
+      } else {
+        handleStoreError(error);
       }
     } finally {
-      set({ isCheckingAuth: false });
+      if (isCurrentCheck()) set({ isCheckingAuth: false });
     }
   },
 
   signUp: async data => {
-    set({ isSigningUp: true });
+    // The browser applies logout's Set-Cookie before this promise settles.
+    // Wait for it so a late logout cannot erase the next login's cookie.
+    if (pendingLogout) await pendingLogout;
+    const sessionVersion = advanceAuthSession();
+    get().disconnectSocket();
+    set({ authUser: null, isSigningUp: true, isCheckingAuth: false });
     try {
-      // Create account
       await apiService.post<AuthResponse>('/auth/sign-up', data);
+      if (!isCurrentAuthSession(sessionVersion)) return;
 
-      // Immediately re-check auth to get the canonical user from the server
-      // (avoids any drift between signup response and subsequent socket/HTTP IDs)
+      // Re-check the account to use the canonical server user and IDs.
       await get().checkAuth();
-
-      toast.success('Account created successfully');
-      // Note: connectSocket is invoked by checkAuth after setting authUser
+      if (isCurrentAuthSession(sessionVersion) && get().authUser) {
+        toast.success('Account created successfully');
+      }
     } catch (e: unknown) {
-      handleStoreError(e, 'Failed to create account');
+      if (isCurrentAuthSession(sessionVersion)) handleStoreError(e, 'Failed to create account');
     } finally {
-      set({ isSigningUp: false });
+      if (isCurrentAuthSession(sessionVersion)) set({ isSigningUp: false });
     }
   },
 
   login: async data => {
-    set({ isLoggingIn: true });
+    if (pendingLogout) await pendingLogout;
+    const sessionVersion = advanceAuthSession();
+    get().disconnectSocket();
+    set({ authUser: null, isLoggingIn: true, isCheckingAuth: false });
     try {
       const response = await apiService.post<AuthResponse>('/auth/login', data);
-
-      // Check if response has user property or not
+      if (!isCurrentAuthSession(sessionVersion)) return;
       const userData = response.user || response;
       set({ authUser: userData });
 
       toast.success('Logged in successfully');
       get().connectSocket();
     } catch (e: unknown) {
-      handleStoreError(e, 'Login failed');
+      if (isCurrentAuthSession(sessionVersion)) handleStoreError(e, 'Login failed');
     } finally {
-      set({ isLoggingIn: false });
+      if (isCurrentAuthSession(sessionVersion)) set({ isLoggingIn: false });
     }
   },
 
-  logout: async () => {
-    try {
-      await apiService.post('/auth/logout');
-      toast.success('Logged out successfully');
-      set({ authUser: null });
-      get().disconnectSocket();
-    } catch (e: unknown) {
-      handleStoreError(e, 'Logout failed');
-      // Force logout on client side even if server request fails
-      set({ authUser: null });
-      get().disconnectSocket();
-    }
+  logout: () => {
+    if (pendingLogout) return pendingLogout;
+    // Detach the current client before the server notifies other tabs of logout.
+    const sessionVersion = advanceAuthSession();
+    get().disconnectSocket();
+    set({ authUser: null, isCheckingAuth: false, isLoggingIn: false, isSigningUp: false });
+    toast.dismiss();
+    const logoutRequest = apiService.post('/auth/logout').then(() => {
+      if (isCurrentAuthSession(sessionVersion)) toast.success('Logged out successfully');
+    }).catch((e: unknown) => {
+      if (isCurrentAuthSession(sessionVersion)) handleStoreError(e, 'Logout failed');
+    }).finally(() => {
+      if (pendingLogout === logoutRequest) pendingLogout = undefined;
+    });
+    pendingLogout = logoutRequest;
+    return logoutRequest;
+  },
+
+  forceLogout: (message = SESSION_EXPIRED_MESSAGE, sessionVersion = getAuthSessionVersion()) => {
+    if (!isCurrentAuthSession(sessionVersion)) return;
+    advanceAuthSession();
+    get().disconnectSocket();
+    set({ authUser: null, isCheckingAuth: false, isLoggingIn: false, isSigningUp: false });
+    toast.dismiss();
+    toast.error(message, { id: 'session-ended', duration: 7000 });
   },
 
   connectSocket: () => {
-    const { authUser } = useAuthStore.getState();
-    if (!authUser || get().socket?.connected) return;
-
+    if (!get().authUser || get().socket) return;
+    const sessionVersion = getAuthSessionVersion();
     const socket: AppSocket = io(env.wsUrl, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
@@ -103,19 +145,45 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       reconnectionAttempts: 5,
       timeout: 20000,
       forceNew: false,
+      autoConnect: false,
     });
-
-    socket.connect();
+    const isCurrentSocket = () =>
+      get().socket === socket && isCurrentAuthSession(sessionVersion);
 
     set({ socket });
-
     socket.on('getOnlineUsers', userIds => {
-      set({ onlineUsers: userIds });
+      if (isCurrentSocket()) set({ onlineUsers: userIds });
     });
+    socket.on('session:revoked', data => {
+      if (isCurrentSocket()) get().forceLogout(data.message || SESSION_REVOKED_MESSAGE, sessionVersion);
+    });
+    socket.on('connect_error', error => {
+      if (!isCurrentSocket()) return;
+      const data = (error as Error & { data?: { code?: string; message?: string } }).data;
+      if (data?.code === 'SESSION_REVOKED' || data?.code === 'UNAUTHORIZED') {
+        get().forceLogout(
+          data.message || (data.code === 'SESSION_REVOKED' ? SESSION_REVOKED_MESSAGE : SESSION_EXPIRED_MESSAGE),
+          sessionVersion
+        );
+      }
+    });
+    socket.connect();
   },
 
   disconnectSocket: () => {
     const socket = get().socket;
-    if (socket?.connected) socket.disconnect();
+    set({ socket: null, onlineUsers: [] });
+    if (!socket) return;
+    socket.off('getOnlineUsers');
+    socket.off('session:revoked');
+    socket.off('connect_error');
+    socket.disconnect();
   },
 }));
+
+registerAuthenticationFailureHandler(({ version, code, message }) => {
+  // An anonymous initial /auth/check should open login without a notification.
+  if (useAuthStore.getState().authUser || code === 'SESSION_REVOKED') {
+    useAuthStore.getState().forceLogout(message, version);
+  }
+});
