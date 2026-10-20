@@ -15,7 +15,7 @@ const { default: Message } = await import("../src/models/message.model.js");
 const { default: logger } = await import("../src/config/logger.js");
 const { buildChatSummariesPipeline, LAST_MESSAGE_PREVIEW_LENGTH } =
   await import("../src/services/chat.service.js");
-const { getChats } = await import("../src/controllers/message.controller.js");
+const { getChats, getMessagesById } = await import("../src/controllers/message.controller.js");
 const { io } = await import("../src/config/socket.js");
 
 logger.silent = true;
@@ -98,4 +98,18 @@ test("aggregation failure returns 500 without leaking the error", async () => {
 
   assert.equal(res.statusCode, 500);
   assert.deepEqual(res.body, { error: "Internal server error", requestId: "req-3" });
+});
+
+test("conversation messages are explicitly sorted oldest first", async () => {
+  const messages = [{ _id: "m1" }, { _id: "m2" }];
+  let sortedBy;
+  mock.method(Message, "find", () => ({
+    sort(order) { sortedBy = order; return Promise.resolve(messages); },
+  }));
+
+  const res = response();
+  await getMessagesById({ user: { _id: myId }, params: { id: partnerId }, requestId: "req-4" }, res);
+
+  assert.deepEqual(sortedBy, { createdAt: 1, _id: 1 });
+  assert.deepEqual(res.body, { messages, requestId: "req-4" });
 });

@@ -43,7 +43,9 @@ export const getMessagesById = async (req, res) => {
           receiverId: myId,
         },
       ],
-    });
+    })
+      // Without an explicit sort MongoDB returns index order, not chronology.
+      .sort({ createdAt: 1, _id: 1 });
 
     res.status(200).json({
       messages: message,
