@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { formatMessageTime } from "@/utils/chatTimestamp";
 
 function ChatContainer() {
   const {
@@ -89,9 +90,7 @@ function ChatContainer() {
                       </p>
                     )}
                     <p className="mt-1.5 text-right text-[10px] leading-none opacity-65">
-                      {msg.createdAt
-                        ? new Date(msg.createdAt).toISOString().slice(11, 16)
-                        : new Date().toISOString().slice(11, 16)}
+                      {formatMessageTime(msg.createdAt || new Date())}
                     </p>
                   </div>
                 </div>

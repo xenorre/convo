@@ -3,24 +3,47 @@ import { useEffect, memo, useMemo, useCallback } from "react";
 import UsersLoadingSkeleton from "./UsersLoadingSkeleton";
 import NoChatsFound from "./NoChatsFound";
 import { useAuthStore } from "@/store/useAuthStore";
-import type { Contact } from "@/types/auth";
-import { UserRoundIcon } from "lucide-react";
+import type { ChatSummary } from "@/types/chat";
+import { PaperclipIcon, UserRoundIcon } from "lucide-react";
+import { formatChatTimestamp, formatFullTimestamp } from "@/utils/chatTimestamp";
+
+const LastMessagePreview = ({
+  lastMessage,
+  isMine,
+}: {
+  lastMessage: NonNullable<ChatSummary["lastMessage"]>;
+  isMine: boolean;
+}) => (
+  <>
+    {isMine && <span className="shrink-0">You:</span>}
+    {lastMessage.hasAttachment && (
+      <PaperclipIcon className="size-3.5 shrink-0" aria-label="Attachment" />
+    )}
+    <span className="truncate">
+      {lastMessage.text || (lastMessage.hasAttachment ? "Attachment" : "")}
+    </span>
+  </>
+);
 
 const ChatItem = memo(
   ({
     chat,
+    myId,
     isOnline,
     isSelected,
     unread,
     onSelect,
   }: {
-    chat: Contact;
+    chat: ChatSummary;
+    myId: string | undefined;
     isOnline: boolean;
     isSelected: boolean;
     unread: number;
-    onSelect: (chat: Contact) => void;
+    onSelect: (chat: ChatSummary) => void;
   }) => {
     const handleClick = useCallback(() => onSelect(chat), [chat, onSelect]);
+    const { lastMessage } = chat;
+    const status = isOnline ? "Online" : "Offline";
 
     return (
       <button
@@ -56,20 +79,41 @@ const ChatItem = memo(
                 title={chat.fullName}
               >
                 {chat.fullName}
+                {lastMessage && <span className="sr-only"> ({status})</span>}
               </h4>
-              <p className="mt-1 text-xs text-slate-400">
-                {isOnline ? "Online" : "Offline"}
+              <p
+                className={`mt-1 flex min-w-0 items-center gap-1 text-xs ${unread > 0 ? "text-slate-300" : "text-slate-400"}`}
+              >
+                {lastMessage ? (
+                  <LastMessagePreview
+                    lastMessage={lastMessage}
+                    isMine={lastMessage.senderId === myId}
+                  />
+                ) : (
+                  status
+                )}
               </p>
             </div>
           </div>
-          {unread > 0 && (
-            <span
-              aria-label={`${unread} unread messages`}
-              className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-cyan-400/15 px-2 text-xs font-semibold text-cyan-300 ring-1 ring-inset ring-cyan-400/20"
-            >
-              {unread > 99 ? "99+" : unread}
-            </span>
-          )}
+          <div className="flex shrink-0 flex-col items-end justify-between gap-1 self-stretch py-0.5">
+            {lastMessage && (
+              <time
+                dateTime={lastMessage.createdAt}
+                title={formatFullTimestamp(lastMessage.createdAt)}
+                className={`text-xs ${unread > 0 ? "text-cyan-300" : "text-slate-400"}`}
+              >
+                {formatChatTimestamp(lastMessage.createdAt)}
+              </time>
+            )}
+            {unread > 0 && (
+              <span
+                aria-label={`${unread} unread messages`}
+                className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-cyan-400/15 px-2 text-xs font-semibold text-cyan-300 ring-1 ring-inset ring-cyan-400/20"
+              >
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </div>
         </div>
       </button>
     );
@@ -87,7 +131,7 @@ function ChatsList() {
     selectedUser,
     setSelectedUser,
   } = useChatStore();
-  const { onlineUsers } = useAuthStore();
+  const { onlineUsers, authUser } = useAuthStore();
 
   // Memoize the getMyChatPartners function to prevent unnecessary re-calls
   const getMyChatPartnersStable = useCallback(() => {
@@ -102,7 +146,7 @@ function ChatsList() {
   const onlineUsersSet = useMemo(() => new Set(onlineUsers), [onlineUsers]);
 
   const handleSelectUser = useCallback(
-    (chat: Contact) => {
+    (chat: ChatSummary) => {
       setSelectedUser(chat);
     },
     [setSelectedUser],
@@ -123,6 +167,7 @@ function ChatsList() {
         <ChatItem
           key={chat._id}
           chat={chat}
+          myId={authUser?._id}
           isOnline={onlineUsersSet.has(chat._id)}
           isSelected={selectedUser?._id === chat._id}
           unread={unreadCounts[chat._id] || 0}

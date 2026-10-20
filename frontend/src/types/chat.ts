@@ -1,10 +1,17 @@
 import type { Contact } from "./auth";
 import type { Message } from "./message";
 import type { AppSocket } from "./socket";
+import type { ChatLastMessage } from "./api";
+
+// A conversation in the chat list. lastMessage is optional so the list still
+// renders when a server response does not include it.
+export interface ChatSummary extends Contact {
+  lastMessage?: ChatLastMessage;
+}
 
 export interface ChatStore {
   allContacts: Contact[];
-  chats: Contact[];
+  chats: ChatSummary[];
   unreadCounts: Record<string, number>;
   messages: Message[];
   activeTab: "chats" | "contacts";

@@ -1,5 +1,5 @@
 import { apiService } from "@/services/apiService";
-import type { ChatStore } from "@/types/chat";
+import type { ChatStore, ChatSummary } from "@/types/chat";
 import toast from "react-hot-toast";
 import { create } from "zustand";
 import { useAuthStore } from "./useAuthStore";
@@ -8,7 +8,7 @@ import type { Contact } from "@/types/auth";
 import { handleStoreError } from "@/utils/errorHandling";
 import { notifyIncomingMessage } from "@/utils/messageNotifications";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
-import type { ContactsResponse, ChatsResponse, MessagesResponse } from "@/types/api";
+import type { ChatLastMessage, ContactsResponse, ChatsResponse, MessagesResponse } from "@/types/api";
 
 // Normalize messages coming from various sources (REST/socket) to ensure
 // senderId/receiverId are plain strings. Some backends may emit populated
@@ -38,6 +38,39 @@ const normalizeMessage = (msg: any): Message => ({
   updatedAt: typeof msg.updatedAt === "string" ? msg.updatedAt : new Date().toISOString(),
 });
 
+// Same preview length the server uses for the chat list.
+const LAST_MESSAGE_PREVIEW_LENGTH = 120;
+
+// selectedUser stays a plain contact even when it is picked from the chat list.
+const toContact = ({ _id, fullName, profilePic }: Contact): Contact => ({ _id, fullName, profilePic });
+
+const toLastMessage = (message: Message): ChatLastMessage => ({
+  _id: message._id,
+  senderId: message.senderId,
+  text: Array.from(message.text ?? "").slice(0, LAST_MESSAGE_PREVIEW_LENGTH).join(""),
+  hasAttachment: Boolean(message.image),
+  createdAt: message.createdAt,
+});
+
+const lastActivity = (chat: ChatSummary) =>
+  chat.lastMessage ? Date.parse(chat.lastMessage.createdAt) || 0 : 0;
+
+// Moves the partner's conversation to where its newest message belongs,
+// adding it when it is new. A message delivered late never replaces a newer preview.
+const withLatestMessage = (chats: ChatSummary[], partner: Contact, message: Message): ChatSummary[] => {
+  const partnerId = String(partner._id);
+  const existing = chats.find((chat) => String(chat._id) === partnerId);
+  const incoming = toLastMessage(message);
+  const lastMessage = existing?.lastMessage
+    && Date.parse(existing.lastMessage.createdAt) > Date.parse(incoming.createdAt)
+    ? existing.lastMessage
+    : incoming;
+  const updated: ChatSummary = { ...(existing ?? toContact(partner)), lastMessage };
+
+  return [updated, ...chats.filter((chat) => String(chat._id) !== partnerId)]
+    .sort((a, b) => lastActivity(b) - lastActivity(a));
+};
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   allContacts: [],
   chats: [],
@@ -58,7 +91,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedUser: (selectedUser) => {
-    set({ selectedUser });
+    set({ selectedUser: selectedUser && toContact(selectedUser) });
   },
 
   getAllContacts: async () => {
@@ -213,6 +246,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         messages: state.messages.map((msg) =>
           msg._id === tempId ? normalized : msg
         ),
+        chats: withLatestMessage(state.chats, selectedUser, normalized),
       }));
     } catch (e) {
       if (!isCurrentAuthSession(sessionVersion)) return;
@@ -248,7 +282,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const selectedUser = state.selectedUser;
       const chats = state.chats;
 
-      // Ensure the sender exists in chats; if not, add using provided snapshot (if any)
+      // Move the sender's chat up with this message, adding it from the snapshot (if any) when new
       const senderId = actualMessage.senderId;
       const knownSender = chats.find(chat => String(chat._id) === senderId)
         || state.allContacts.find(contact => String(contact._id) === senderId);
@@ -260,9 +294,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         profilePic: senderSnapshot?.profilePic || knownSender?.profilePic || '',
       };
       const hasChat = chats.some((c) => String(c._id) === senderId);
-      if (!hasChat && senderSnapshot) {
-        set({ chats: [sender, ...chats] });
-      } else if (!hasChat) {
+      if (hasChat || senderSnapshot) {
+        set((s) => ({ chats: withLatestMessage(s.chats, sender, actualMessage) }));
+      } else {
         // Fallback: refresh chat partners list
         get().getMyChatPartners().catch(() => {});
       }
@@ -298,7 +332,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             const contact = currentState.chats.find(chat => String(chat._id) === senderId)
               || currentState.allContacts.find(user => String(user._id) === senderId)
               || sender;
-            set({ selectedUser: contact, activeTab: 'chats' });
+            set({ selectedUser: toContact(contact), activeTab: 'chats' });
           },
         });
       }

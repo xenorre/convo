@@ -249,3 +249,101 @@ describe('incoming message notifications', () => {
     expect(apiService.post).toHaveBeenCalledWith(`/messages/mark-read/${sender._id}`, {});
   });
 });
+
+describe('chat list order and last message', () => {
+  const quiet: Contact = { _id: 'quiet-id', fullName: 'Bartek Nowak', profilePic: '' };
+  const summary = (contact: Contact, createdAt: string, text = 'older') => ({
+    ...contact,
+    lastMessage: { _id: `${contact._id}-last`, senderId: contact._id, text, hasAttachment: false, createdAt },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiService.get).mockResolvedValue({ chats: [], unreadCounts: {} });
+    vi.mocked(apiService.post).mockResolvedValue({});
+    useChatStore.setState(useChatStore.getInitialState(), true);
+    useAuthStore.setState({
+      ...useAuthStore.getInitialState(),
+      authUser: { _id: 'my-id', fullName: 'Current User', email: 'current@example.com', profilePic: '' },
+      socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
+    }, true);
+  });
+
+  it('moves the sender to the top with the incoming message as preview', () => {
+    useChatStore.setState({
+      chats: [summary(quiet, '2026-10-19T11:30:00.000Z'), summary(sender, '2026-10-19T11:00:00.000Z')],
+    });
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message: { ...message, image: 'https://cdn.test/f.pdf' }, sender });
+
+    const [first, second] = useChatStore.getState().chats;
+    expect(first._id).toBe(sender._id);
+    expect(first.lastMessage).toEqual({
+      _id: message._id,
+      senderId: sender._id,
+      text: message.text,
+      hasAttachment: true,
+      createdAt: message.createdAt,
+    });
+    expect(second._id).toBe(quiet._id);
+    expect(apiService.get).not.toHaveBeenCalled();
+  });
+
+  it('adds a new sender from the snapshot with its message', () => {
+    useChatStore.setState({ chats: [summary(quiet, '2026-10-19T10:00:00.000Z')] });
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message, sender });
+
+    expect(useChatStore.getState().chats.map(chat => chat._id)).toEqual([sender._id, quiet._id]);
+    expect(useChatStore.getState().chats[0]).toMatchObject({ fullName: sender.fullName });
+  });
+
+  it('keeps a newer preview when an older message arrives late', () => {
+    const newer = summary(sender, '2026-10-19T12:30:00.000Z', 'newer');
+    useChatStore.setState({ chats: [newer, summary(quiet, '2026-10-19T12:10:00.000Z')] });
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message, sender });
+
+    expect(useChatStore.getState().chats[0]).toEqual(newer);
+  });
+
+  it('puts a sent message at the top, including a first message to a new contact', async () => {
+    useChatStore.setState({ chats: [summary(quiet, '2026-10-19T10:00:00.000Z')], selectedUser: sender });
+    const sent = {
+      ...message,
+      _id: 'sent-id',
+      senderId: 'my-id',
+      receiverId: sender._id,
+      text: 'a'.repeat(200),
+      createdAt: '2026-10-20T08:00:00.000Z',
+    };
+    vi.mocked(apiService.post).mockResolvedValueOnce({ message: sent });
+
+    await useChatStore.getState().sendMessage({ text: sent.text });
+
+    const [first] = useChatStore.getState().chats;
+    expect(first).toMatchObject({ _id: sender._id, fullName: sender.fullName });
+    expect(first.lastMessage).toMatchObject({ _id: 'sent-id', senderId: 'my-id', hasAttachment: false });
+    expect(first.lastMessage?.text).toHaveLength(120);
+    expect(useChatStore.getState().messages.map(msg => msg._id)).toEqual(['sent-id']);
+  });
+
+  it('does not touch the chat list when sending fails', async () => {
+    const chats = [summary(quiet, '2026-10-19T10:00:00.000Z')];
+    useChatStore.setState({ chats, selectedUser: sender });
+    vi.mocked(apiService.post).mockRejectedValueOnce(new Error('offline'));
+
+    await useChatStore.getState().sendMessage({ text: 'hello' });
+
+    expect(useChatStore.getState().chats).toBe(chats);
+  });
+
+  it('stores the selected chat as a plain contact', () => {
+    useChatStore.getState().setSelectedUser(summary(sender, '2026-10-19T10:00:00.000Z'));
+
+    expect(useChatStore.getState().selectedUser).toEqual(sender);
+  });
+});
