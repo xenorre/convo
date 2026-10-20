@@ -1,6 +1,7 @@
 import User from "#src/models/user.model.js";
 import Message from "#src/models/message.model.js";
 import { uploadMessageFile } from "#src/services/storage.service.js";
+import { getChatSummaries } from "#src/services/chat.service.js";
 import logger from "#src/config/logger.js";
 import { io } from "#src/config/socket.js";
 
@@ -152,37 +153,10 @@ export const markRead = async (req, res) => {
 
 export const getChats = async (req, res) => {
   try {
-    const myId = req.user._id;
-
-    const messages = await Message.find({
-      $or: [{ senderId: myId }, { receiverId: myId }],
-    });
-
-    const chatPartnersIds = [
-      ...new Set(
-        messages.map((msg) =>
-          msg.senderId.toString() === myId.toString()
-            ? msg.receiverId.toString()
-            : msg.senderId.toString()
-        )
-      ),
-    ];
-
-    const chatPartners = await User.find({
-      _id: { $in: chatPartnersIds },
-    }).select("-password -email -createdAt -updatedAt");
-
-    const unreadAgg = await Message.aggregate([
-      { $match: { receiverId: myId, readAt: null } },
-      { $group: { _id: "$senderId", count: { $sum: 1 } } },
-    ]);
-    const unreadCounts = unreadAgg.reduce((acc, row) => {
-      acc[String(row._id)] = row.count;
-      return acc;
-    }, {});
+    const { chats, unreadCounts } = await getChatSummaries(req.user._id);
 
     res.status(200).json({
-      chats: chatPartners,
+      chats,
       unreadCounts,
       requestId: req.requestId,
     });

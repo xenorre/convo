@@ -28,6 +28,12 @@ const messages = new mongoose.Schema(
   { timestamps: true }
 );
 
+// The chat list matches on either side of a conversation and reads newest
+// first (_id breaks timestamp ties); MongoDB merges these two index scans
+// instead of sorting every message in memory.
+messages.index({ senderId: 1, createdAt: -1, _id: -1 });
+messages.index({ receiverId: 1, createdAt: -1, _id: -1 });
+
 const Message = mongoose.model("Message", messages);
 
 export default Message;

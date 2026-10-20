@@ -26,11 +26,23 @@ export interface ContactsResponse {
   requestId: string;
 }
 
+// Newest message of a conversation, as sent with the chat list.
+// `text` is cut to a short preview on the server.
+export interface ChatLastMessage {
+  _id: string;
+  senderId: string;
+  text: string;
+  hasAttachment: boolean;
+  createdAt: string;
+}
+
 export interface ChatsResponse {
+  // Ordered by the newest message, most recent first.
   chats: Array<{
     _id: string;
     fullName: string;
     profilePic: string;
+    lastMessage: ChatLastMessage;
   }>;
   unreadCounts?: Record<string, number>;
   requestId: string;
