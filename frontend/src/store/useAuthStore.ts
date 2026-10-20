@@ -131,6 +131,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return logoutRequest;
   },
 
+  updateAuthUser: user => {
+    const current = get().authUser;
+    if (!current || current._id !== user._id) return;
+    set({
+      authUser: {
+        _id: current._id,
+        email: user.email ?? current.email,
+        fullName: user.fullName ?? current.fullName,
+        profilePic: user.profilePic ?? current.profilePic,
+      },
+    });
+  },
+
   forceLogout: (message = SESSION_EXPIRED_MESSAGE, sessionVersion = getAuthSessionVersion()) => {
     if (!isCurrentAuthSession(sessionVersion)) return;
     advanceAuthSession();

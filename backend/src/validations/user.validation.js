@@ -5,6 +5,7 @@ export const updateProfileSchema = z
   .object({
     fullName: z
       .string()
+      .trim()
       .min(2, "Full name must be at least 2 characters")
       .max(50, "Full name must be less than 50 characters")
       .optional(),

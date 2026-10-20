@@ -1,6 +1,7 @@
 import {
   updateProfile,
   updateProfileImage,
+  removeProfileImage,
   getProfile,
 } from "#src/controllers/user.controller.js";
 import { protectRoute } from "#src/middleware/auth.middleware.js";
@@ -26,5 +27,7 @@ router.put(
   validateFileUpload,
   updateProfileImage
 );
+
+router.delete("/profile-image", removeProfileImage);
 
 export default router;

@@ -5,6 +5,26 @@ import {
   deleteFile,
 } from "#src/services/storage.service.js";
 
+export const DEFAULT_PROFILE_PIC = User.schema.path("profilePic").defaultValue;
+
+// The schema default (and older placeholder URLs) live outside our storage.
+export const isDefaultProfileImage = (url) =>
+  !url || url.includes("wikimedia.org") || url.includes("placeholder");
+
+const deleteStoredProfileImage = async (userId, imageUrl) => {
+  if (isDefaultProfileImage(imageUrl)) return;
+  try {
+    await deleteFile(imageUrl);
+    logger.info("Old profile image deleted", { userId, oldImageUrl: imageUrl });
+  } catch (deleteError) {
+    logger.warn("Failed to delete old profile image", {
+      userId,
+      oldImageUrl: imageUrl,
+      error: deleteError.message,
+    });
+  }
+};
+
 export const updateUserProfileImage = async (userId, fileData) => {
   try {
     const user = await User.findById(userId);
@@ -13,9 +33,6 @@ export const updateUserProfileImage = async (userId, fileData) => {
     }
 
     const oldProfilePic = user.profilePic;
-    const isDefaultImage =
-      oldProfilePic?.includes("wikimedia.org") ||
-      oldProfilePic?.includes("placeholder");
 
     const newImageUrl = await uploadProfileImage(
       fileData.buffer,
@@ -30,21 +47,7 @@ export const updateUserProfileImage = async (userId, fileData) => {
       { new: true, runValidators: true }
     ).select("-password");
 
-    if (!isDefaultImage && oldProfilePic) {
-      try {
-        await deleteFile(oldProfilePic);
-        logger.info("Old profile image deleted", {
-          userId,
-          oldImageUrl: oldProfilePic,
-        });
-      } catch (deleteError) {
-        logger.warn("Failed to delete old profile image", {
-          userId,
-          oldImageUrl: oldProfilePic,
-          error: deleteError.message,
-        });
-      }
-    }
+    await deleteStoredProfileImage(userId, oldProfilePic);
 
     logger.info("Profile image updated successfully", {
       userId,
@@ -57,6 +60,34 @@ export const updateUserProfileImage = async (userId, fileData) => {
     logger.error("Failed to update profile image", {
       userId,
       fileName: fileData?.originalname,
+      error: error.message,
+    });
+    throw error;
+  }
+};
+
+// Goes back to the default avatar; the stored file is removed best-effort.
+export const removeUserProfileImage = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const oldProfilePic = user.profilePic;
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { profilePic: DEFAULT_PROFILE_PIC },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    await deleteStoredProfileImage(userId, oldProfilePic);
+
+    logger.info("Profile image removed", { userId });
+    return updatedUser;
+  } catch (error) {
+    logger.error("Failed to remove profile image", {
+      userId,
       error: error.message,
     });
     throw error;

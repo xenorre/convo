@@ -357,7 +357,8 @@ export class ApiService {
     file: File,
     onProgress?: (progress: number) => void,
     fieldName: string = 'file',
-    additionalData?: Record<string, string>
+    additionalData?: Record<string, string>,
+    method: 'post' | 'put' = 'post'
   ): Promise<T> {
     const formData = new FormData();
     formData.append(fieldName, file);
@@ -369,7 +370,10 @@ export class ApiService {
       });
     }
 
-    const response = await this.instance.post<T>(url, formData, this.sessionConfig({
+    const response = await this.instance.request<T>(this.sessionConfig({
+      method,
+      url,
+      data: formData,
       headers: {
         'Content-Type': 'multipart/form-data',
       },

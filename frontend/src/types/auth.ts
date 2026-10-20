@@ -38,6 +38,8 @@ export interface AuthState {
 
   login: (data: LoginData) => Promise<void>;
   logout: () => Promise<void>;
+  // Applies a profile change returned by the server to the signed-in user.
+  updateAuthUser: (user: AuthUser) => void;
   forceLogout: (message?: string, sessionVersion?: number) => void;
   connectSocket: () => Promise<void>;
   disconnectSocket: () => void;

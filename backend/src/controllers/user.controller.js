@@ -1,6 +1,7 @@
 import {
   updateUserProfile,
   updateUserProfileImage,
+  removeUserProfileImage,
   getUserProfile,
 } from "#src/services/user.service.js";
 import {
@@ -79,6 +80,28 @@ export const updateProfileImage = async (req, res) => {
         error: "Upload failed",
         message: "Failed to upload image to storage",
       });
+    }
+
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const removeProfileImage = async (req, res) => {
+  try {
+    const updatedUser = await removeUserProfileImage(req.user.id);
+
+    res.status(200).json({
+      message: "Profile image removed successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+    logger.error("Failed to remove profile image", {
+      userId: req.user?.id,
+      error: error.message,
+    });
+
+    if (error.message === "User not found") {
+      return res.status(404).json({ error: "User not found" });
     }
 
     res.status(500).json({ error: "Internal server error" });

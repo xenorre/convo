@@ -19,6 +19,10 @@ vi.mock('@/pages/ChatPage', () => ({
   },
 }));
 
+vi.mock('@/pages/SettingsPage', () => ({
+  default: () => <p>Settings Page</p>,
+}));
+
 const sender = { _id: 'sender-1', fullName: 'Anna', profilePic: '/anna.png' };
 const account = { _id: 'me', fullName: 'Me', email: 'me@example.com', profilePic: '' };
 const checkAuth = useAuthStore.getState().checkAuth;

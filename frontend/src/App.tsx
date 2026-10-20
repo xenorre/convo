@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router";
+import { Navigate, Route, Routes } from "react-router";
 import Login from "@/pages/Login";
 import RootLayout from "@/RootLayout";
 import { ProtectedRoute, PublicRoute } from "@/components/ProtectedRoute";
@@ -10,6 +10,9 @@ import { AppToaster } from "./components/AppToaster";
 
 const ChatPage = lazy(() => import("@/pages/ChatPage"));
 const SignUp = lazy(() => import("@/pages/SignUp"));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
+const ProfileSettings = lazy(() => import("@/pages/settings/ProfileSettings"));
+const AboutSettings = lazy(() => import("@/pages/settings/AboutSettings"));
 
 function App() {
   const checkAuth = useAuthStore(state => state.checkAuth);
@@ -55,10 +58,18 @@ function App() {
               path="settings"
               element={
                 <ProtectedRoute>
-                  <div>Settings Page</div>
+                  <Suspense fallback={<PageLoader />}>
+                    <SettingsPage />
+                  </Suspense>
                 </ProtectedRoute>
               }
-            />
+            >
+              {/* Desktop shows the first section next to the list; phones show only the list. */}
+              <Route index element={<ProfileSettings />} />
+              <Route path="profile" element={<ProfileSettings />} />
+              <Route path="about" element={<AboutSettings />} />
+              <Route path="*" element={<Navigate to="/settings" replace />} />
+            </Route>
           </Route>
         </Routes>
       </ErrorBoundary>

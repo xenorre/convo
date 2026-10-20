@@ -36,6 +36,17 @@ export interface ChatLastMessage {
   createdAt: string;
 }
 
+// Returned by the /users profile endpoints.
+export interface ProfileResponse {
+  message: string;
+  user: {
+    _id: string;
+    email: string;
+    fullName: string;
+    profilePic: string;
+  };
+}
+
 export interface ChatsResponse {
   // Ordered by the newest message, most recent first.
   chats: Array<{
