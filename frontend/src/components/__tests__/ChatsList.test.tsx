@@ -59,4 +59,24 @@ describe('ChatsList', () => {
     expect(within(rows[3]).getByText('Offline')).toBeInTheDocument();
     expect(rows[3].querySelector('time')).toBeNull();
   });
+
+  it('filters chats by the search query and offers to clear an empty result', async () => {
+    const { rerender } = render(<ChatsList />);
+    await screen.findAllByRole('button');
+
+    useChatStore.getState().setChatSearchQuery('bartek');
+    rerender(<ChatsList />);
+    expect(screen.getAllByRole('heading').map(h => h.textContent)).toEqual(['Bartek (Offline)']);
+    expect(screen.getByRole('status')).toHaveTextContent('1 chat found');
+
+    useChatStore.getState().setChatSearchQuery('nobody');
+    rerender(<ChatsList />);
+    expect(screen.queryAllByRole('heading')).toEqual([]);
+    expect(screen.getByText(/No chats match/)).toHaveTextContent('No chats match “nobody”');
+
+    screen.getByRole('button', { name: 'Clear search' }).click();
+    rerender(<ChatsList />);
+    expect(useChatStore.getState().chatSearchQuery).toBe('');
+    expect(screen.getAllByRole('heading')).toHaveLength(4);
+  });
 });

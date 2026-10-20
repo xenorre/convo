@@ -15,6 +15,7 @@ export interface ChatStore {
   unreadCounts: Record<string, number>;
   messages: Message[];
   activeTab: "chats" | "contacts";
+  chatSearchQuery: string;
   selectedUser: Contact | null;
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
@@ -23,6 +24,7 @@ export interface ChatStore {
   unbindSocket: (() => void) | null;
   resetChat: () => void;
   setActiveTab: (tab: "chats" | "contacts") => void;
+  setChatSearchQuery: (query: string) => void;
   setSelectedUser: (user: Contact | null) => void;
   getAllContacts: () => Promise<void>;
   getMyChatPartners: () => Promise<void>;

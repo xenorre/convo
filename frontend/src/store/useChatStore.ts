@@ -77,6 +77,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   unreadCounts: {},
   messages: [],
   activeTab: "chats",
+  chatSearchQuery: "",
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
@@ -90,6 +91,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setChatSearchQuery: (chatSearchQuery) => set({ chatSearchQuery }),
   setSelectedUser: (selectedUser) => {
     set({ selectedUser: selectedUser && toContact(selectedUser) });
   },

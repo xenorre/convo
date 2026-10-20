@@ -6,6 +6,22 @@ import { useAuthStore } from "@/store/useAuthStore";
 import type { ChatSummary } from "@/types/chat";
 import { PaperclipIcon, UserRoundIcon } from "lucide-react";
 import { formatChatTimestamp, formatFullTimestamp } from "@/utils/chatTimestamp";
+import { filterChats } from "@/utils/chatSearch";
+
+const NoSearchResults = ({ query, onClear }: { query: string; onClear: () => void }) => (
+  <div className="flex min-w-0 flex-col items-center gap-3 px-3 py-10 text-center">
+    <p className="max-w-60 break-words text-sm leading-relaxed text-slate-400">
+      No chats match <span className="font-medium text-slate-200">“{query.trim()}”</span>
+    </p>
+    <button
+      type="button"
+      onClick={onClear}
+      className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-500/10 px-5 py-2 text-sm font-medium text-cyan-300 transition-colors hover:bg-cyan-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+    >
+      Clear search
+    </button>
+  </div>
+);
 
 const LastMessagePreview = ({
   lastMessage,
@@ -130,8 +146,16 @@ function ChatsList() {
     isUsersLoading,
     selectedUser,
     setSelectedUser,
+    chatSearchQuery,
+    setChatSearchQuery,
   } = useChatStore();
   const { onlineUsers, authUser } = useAuthStore();
+
+  const visibleChats = useMemo(
+    () => (Array.isArray(chats) ? filterChats(chats, chatSearchQuery) : []),
+    [chats, chatSearchQuery],
+  );
+  const isSearching = chatSearchQuery.trim().length > 0;
 
   // Memoize the getMyChatPartners function to prevent unnecessary re-calls
   const getMyChatPartnersStable = useCallback(() => {
@@ -163,7 +187,15 @@ function ChatsList() {
 
   return (
     <>
-      {chats.map((chat) => (
+      {isSearching && (
+        <p role="status" className="sr-only">
+          {visibleChats.length === 1 ? "1 chat found" : `${visibleChats.length} chats found`}
+        </p>
+      )}
+      {isSearching && visibleChats.length === 0 && (
+        <NoSearchResults query={chatSearchQuery} onClear={() => setChatSearchQuery("")} />
+      )}
+      {visibleChats.map((chat) => (
         <ChatItem
           key={chat._id}
           chat={chat}
