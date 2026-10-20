@@ -344,3 +344,29 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // No-op: global socket handler remains bound for real-time updates
   },
 }));
+
+// This module loads after authentication. Own the session lifecycle here so
+// account changes clear private state synchronously, before React can render it.
+const unsubscribeAuth = useAuthStore.subscribe((state, previous) => {
+  if (previous.authUser && state.authUser?._id !== previous.authUser._id) {
+    useChatStore.getState().resetChat();
+  }
+  if (state.socket !== previous.socket) {
+    if (state.socket) {
+      useChatStore.getState().bindSocketOnce();
+    } else {
+      useChatStore.getState().unbindSocket?.();
+      useChatStore.setState({ socketBound: false, boundSocket: null, unbindSocket: null });
+    }
+  }
+});
+
+// A restored session may have connected while this chunk was downloading.
+if (useAuthStore.getState().socket) useChatStore.getState().bindSocketOnce();
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    unsubscribeAuth();
+    useChatStore.getState().unbindSocket?.();
+  });
+}

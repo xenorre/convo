@@ -3,10 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@/index.css";
 import App from "@/App.tsx";
 import { BrowserRouter } from "react-router";
-import { healthMonitor } from "@/services/healthMonitor";
-
-// Initialize health monitoring
-healthMonitor.startMonitoring();
+import { env } from "@/config/env";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -15,3 +12,22 @@ createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </StrictMode>
 );
+
+// Optional monitoring should not compete with rendering the application.
+if (env.metricsEndpoint || env.healthEndpoint) {
+  const startMonitoring = () => {
+    void import("@/services/healthMonitor")
+      .then(({ healthMonitor }) => {
+        healthMonitor.startMonitoring();
+      })
+      .catch(() => {
+        // An unavailable optional monitoring chunk must not disrupt the app.
+      });
+  };
+
+  if (document.readyState === "complete") {
+    startMonitoring();
+  } else {
+    window.addEventListener("load", startMonitoring, { once: true });
+  }
+}

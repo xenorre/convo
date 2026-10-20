@@ -1,6 +1,6 @@
-import { AxiosError } from 'axios';
+import axios, { AxiosError } from 'axios';
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiService } from '../apiService';
 import {
   advanceAuthSession,
@@ -32,7 +32,7 @@ const pendingRequest = () => {
     resolve = resolveResponse;
     reject = rejectResponse;
   });
-  const adapter = vi.fn((_config: InternalAxiosRequestConfig) => response);
+  const adapter = vi.fn<(_config: InternalAxiosRequestConfig) => Promise<AxiosResponse>>(() => response);
   return { adapter, resolve, reject };
 };
 
@@ -41,6 +41,57 @@ beforeEach(() => {
   vi.clearAllMocks();
   registerAuthenticationFailureHandler(authenticationFailure);
   document.cookie = 'csrfToken=valid-test-csrf-token; path=/';
+});
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('CSRF bootstrap', () => {
+  it('sends the initial safe auth check without fetching a CSRF token', async () => {
+    document.cookie = 'csrfToken=; max-age=0; path=/';
+    const tokenRequest = vi.spyOn(axios, 'get');
+    const api = new ApiService();
+    const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => ({
+      config, data: { _id: 'user-1' }, status: 200, statusText: 'OK', headers: {},
+    }));
+
+    await expect(api.get('/auth/check', { adapter })).resolves.toEqual({ _id: 'user-1' });
+
+    expect(adapter).toHaveBeenCalledOnce();
+    expect(tokenRequest).not.toHaveBeenCalled();
+    expect(adapter.mock.calls[0][0].headers.get('x-csrf-token')).toBeUndefined();
+  });
+
+  it('still waits for token bootstrap and sends the CSRF header before a write', async () => {
+    document.cookie = 'csrfToken=; max-age=0; path=/';
+    const tokenRequest = vi.spyOn(axios, 'get')
+      .mockResolvedValueOnce({ data: { csrfToken: null } })
+      .mockResolvedValueOnce({ data: { csrfToken: 'fresh-csrf-token' } });
+    const api = new ApiService();
+    const adapter = vi.fn(async (config: InternalAxiosRequestConfig) => {
+      expect(tokenRequest).toHaveBeenCalledTimes(2);
+      expect(config.headers.get('x-csrf-token')).toBe('fresh-csrf-token');
+      return { config, data: {}, status: 200, statusText: 'OK', headers: {} };
+    });
+
+    await api.post('/auth/login', {}, { adapter });
+
+    expect(adapter).toHaveBeenCalledOnce();
+    expect(tokenRequest).toHaveBeenCalledWith('http://localhost:3000/csrf-token', {
+      withCredentials: true, timeout: 10000,
+    });
+  });
+
+  it('does not send an unprotected write when token bootstrap fails', async () => {
+    document.cookie = 'csrfToken=; max-age=0; path=/';
+    vi.spyOn(axios, 'get').mockRejectedValueOnce(new Error('Token endpoint unavailable'));
+    const api = new ApiService();
+    const adapter = vi.fn();
+
+    await expect(api.post('/auth/login', {}, { adapter }))
+      .rejects.toMatchObject({ message: 'Token endpoint unavailable' });
+
+    expect(adapter).not.toHaveBeenCalled();
+  });
 });
 
 describe('API session handling', () => {

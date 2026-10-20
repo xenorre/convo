@@ -61,6 +61,7 @@ describe('incoming message notifications', () => {
       },
       socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
     }, true);
+    useChatStore.setState({ activeTab: 'contacts' });
   });
 
   it('opens a new sender from the event snapshot only when the notification is activated', () => {
@@ -167,6 +168,32 @@ describe('incoming message notifications', () => {
     expect(notifyIncomingMessage).toHaveBeenCalledOnce();
   });
 
+  it('clears private data synchronously on logout without waiting for a React effect', () => {
+    bindIncomingMessages();
+    const socket = useAuthStore.getState().socket!;
+    useChatStore.setState({ messages: [message], allContacts: [sender], selectedUser: sender });
+
+    useAuthStore.setState({ authUser: null, socket: null });
+
+    expect(socket.off).toHaveBeenCalledWith('newMessage', expect.any(Function));
+    expect(useChatStore.getState()).toMatchObject({
+      messages: [], allContacts: [], selectedUser: null, boundSocket: null,
+    });
+  });
+
+  it('clears private data before binding a replacement account socket', () => {
+    useChatStore.setState({ messages: [message], allContacts: [sender], selectedUser: sender });
+    const nextSocket = { on: vi.fn(), off: vi.fn() } as unknown as AppSocket;
+    const currentUser = useAuthStore.getState().authUser!;
+
+    useAuthStore.setState({ authUser: { ...currentUser, _id: 'another-account' }, socket: nextSocket });
+
+    expect(useChatStore.getState()).toMatchObject({
+      messages: [], allContacts: [], selectedUser: null, boundSocket: nextSocket,
+    });
+    expect(nextSocket.on).toHaveBeenCalledWith('newMessage', expect.any(Function));
+  });
+
   it('discards private data returned by a request from the previous session', async () => {
     let completeRequest!: (value: unknown) => void;
     vi.mocked(apiService.get).mockImplementationOnce(() => new Promise(resolve => {
@@ -210,6 +237,8 @@ describe('incoming message notifications', () => {
     bindIncomingMessages();
     const reconnect = socketOn.mock.calls.find(([event]) => event === 'connect')![1];
 
+    // The store now binds before the initial connection completes.
+    reconnect(undefined);
     reconnect(undefined);
     await Promise.resolve();
     await Promise.resolve();

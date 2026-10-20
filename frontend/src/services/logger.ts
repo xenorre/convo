@@ -44,9 +44,9 @@ class Logger {
     }
     
     // Example: Send to custom logging endpoint
-    if (!this.isDevelopment) {
+    if (!this.isDevelopment && env.logEndpoint) {
       try {
-        fetch('/api/logs', {
+        fetch(env.logEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -114,10 +114,10 @@ class Logger {
   trackPerformance(metric: string, value: number, context?: LogContext) {
     this.info(`Performance metric: ${metric} = ${value}ms`, context);
     
-    if (!this.isDevelopment) {
+    if (!this.isDevelopment && env.metricsEndpoint) {
       // Send to performance monitoring service
       try {
-        fetch('/api/metrics', {
+        fetch(env.metricsEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

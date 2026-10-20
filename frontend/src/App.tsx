@@ -1,35 +1,22 @@
 import { Route, Routes } from "react-router";
-import ChatPage from "@/pages/ChatPage";
 import Login from "@/pages/Login";
-import SignUp from "@/pages/SignUp";
 import RootLayout from "@/RootLayout";
 import { ProtectedRoute, PublicRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useAuthStore } from "./store/useAuthStore";
-import { useChatStore } from "@/store/useChatStore";
 import PageLoader from "./components/PageLoader";
 import { AppToaster } from "./components/AppToaster";
 
+const ChatPage = lazy(() => import("@/pages/ChatPage"));
+const SignUp = lazy(() => import("@/pages/SignUp"));
+
 function App() {
-  const { checkAuth, isCheckingAuth, socket, authUser } = useAuthStore();
-  const { bindSocketOnce, resetChat } = useChatStore();
+  const checkAuth = useAuthStore(state => state.checkAuth);
 
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
-
-  // Reset private chat data before binding the next account's socket.
-  useEffect(() => {
-    resetChat();
-  }, [authUser?._id, resetChat]);
-
-  // Bind global socket handlers once a socket exists
-  useEffect(() => {
-    if (socket) bindSocketOnce();
-  }, [socket, bindSocketOnce]);
-
-  if (isCheckingAuth) return <PageLoader />;
 
   return (
     <>
@@ -40,7 +27,9 @@ function App() {
               index
               element={
                 <ProtectedRoute>
-                  <ChatPage />
+                  <Suspense fallback={<PageLoader />}>
+                    <ChatPage />
+                  </Suspense>
                 </ProtectedRoute>
               }
             />
@@ -56,7 +45,9 @@ function App() {
               path="/sign-up"
               element={
                 <PublicRoute>
-                  <SignUp />
+                  <Suspense fallback={<PageLoader />}>
+                    <SignUp />
+                  </Suspense>
                 </PublicRoute>
               }
             />

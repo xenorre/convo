@@ -1,7 +1,7 @@
 // Environment configuration with validation
 const getEnvVar = (key: string, defaultValue?: string): string => {
   const value = import.meta.env[key] || defaultValue;
-  if (!value && !defaultValue) {
+  if (!value && defaultValue === undefined) {
     console.warn(`Environment variable ${key} is not set`);
   }
   return value || '';
@@ -25,7 +25,10 @@ export const env = {
   isProduction,
   
   // Error Logging
-  sentryDsn: getEnvVar('VITE_SENTRY_DSN'),
+  sentryDsn: getEnvVar('VITE_SENTRY_DSN', ''),
+  logEndpoint: getEnvVar('VITE_LOG_ENDPOINT', ''),
+  metricsEndpoint: getEnvVar('VITE_METRICS_ENDPOINT', ''),
+  healthEndpoint: getEnvVar('VITE_HEALTH_ENDPOINT', ''),
   
   // App Configuration
   appName: getEnvVar('VITE_APP_NAME', 'ConvoChat'),

@@ -1,5 +1,8 @@
-@import "tailwindcss";
-@plugin "daisyui";
+@import "tailwindcss" source(".");
+@plugin "daisyui" {
+  themes: dark --default;
+  include: avatar, chat;
+}
 
 @layer base {
   html {
@@ -70,33 +73,37 @@
   }
 }
 
-@property --border-angle {
-  inherits: false;
-  initial-value: 0deg;
-  syntax: "<angle>";
+.surface-panel {
+  background:
+    linear-gradient(45deg, #172033, #1e293b 50%, #172033) padding-box,
+    linear-gradient(135deg, #334155 20%, #22d3ee80 50%, #334155 80%) border-box;
 }
 
-@theme {
-  @keyframes border-spin {
-    from {
-      --border-angle: 0deg;
-    }
-    to {
-      --border-angle: 360deg;
-    }
-  }
+.app-ambience {
+  background:
+    radial-gradient(ellipse 520px 440px at top left, #ec489916, transparent),
+    radial-gradient(
+      ellipse 520px 440px at bottom right,
+      #06b6d420,
+      transparent
+    ),
+    linear-gradient(to right, #94a3b80a 1px, transparent 1px),
+    linear-gradient(to bottom, #94a3b80a 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    40px 40px,
+    40px 40px;
+}
+
+.auth-hero {
+  background:
+    radial-gradient(ellipse at top right, #06b6d410, transparent 70%),
+    radial-gradient(ellipse at bottom left, #3b82f610, transparent 70%);
 }
 
 @layer utilities {
-  .animate-border {
-    animation: border-spin 6s linear infinite;
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .animate-border {
-      animation: none;
-    }
-
     /* Disable all Tailwind animations for users who prefer reduced motion */
     .animate-spin,
     .animate-pulse,
@@ -134,7 +141,7 @@
   }
 
   .auth-btn {
-    @apply flex min-h-12 w-full items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-600 px-4 py-3 font-semibold text-white shadow-lg shadow-cyan-950/25 transition-colors hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60;
+    @apply flex min-h-12 w-full items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-700 px-4 py-3 font-semibold text-white shadow-lg shadow-cyan-950/25 transition-colors hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   .auth-link {

@@ -2,15 +2,7 @@ import { Check } from "lucide-react";
 
 function AuthHero() {
   return (
-    <div className="relative hidden min-w-0 overflow-hidden lg:flex lg:w-1/2">
-      <div
-        className="pointer-events-none absolute -right-48 -top-20 size-[520px] rounded-full bg-cyan-500/8 blur-[110px]"
-        aria-hidden="true"
-      />
-      <div
-        className="pointer-events-none absolute -bottom-32 -left-24 size-80 rounded-full bg-blue-500/8 blur-[100px]"
-        aria-hidden="true"
-      />
+    <div className="auth-hero relative hidden min-w-0 overflow-hidden lg:flex lg:w-1/2">
       <div className="relative z-10 flex w-full flex-col justify-center px-10 py-14 xl:px-14">
         <div className="mb-10 space-y-5">
           <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5">

@@ -70,7 +70,7 @@ function ChatContainer() {
                   <div
                     className={`chat-bubble relative min-w-0 max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed [overflow-wrap:anywhere] sm:max-w-[80%] ${
                       isMyMessage
-                        ? "bg-cyan-600 text-white"
+                        ? "bg-cyan-700 text-white"
                         : "border border-slate-700/50 bg-slate-800 text-slate-200"
                     }`}
                   >

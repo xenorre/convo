@@ -42,6 +42,7 @@ const deferred = <T>() => {
 
 beforeEach(() => {
   advanceAuthSession();
+  useAuthStore.getState().disconnectSocket();
   vi.clearAllMocks();
   useAuthStore.setState({
     authUser: null,
@@ -87,16 +88,16 @@ describe('session check', () => {
 });
 
 describe('session termination', () => {
-  const connectUser = () => {
+  const connectUser = async () => {
     const socket = createSocket();
     vi.mocked(io).mockReturnValueOnce(socket as unknown as ReturnType<typeof io>);
     useAuthStore.setState({ authUser: user, onlineUsers: [user._id] });
-    useAuthStore.getState().connectSocket();
+    await useAuthStore.getState().connectSocket();
     return socket;
   };
 
-  it('immediately clears a revoked session and displays one notification without logging out on the server', () => {
-    const socket = connectUser();
+  it('immediately clears a revoked session and displays one notification without logging out on the server', async () => {
+    const socket = await connectUser();
     const revoke = socket.listeners.get('session:revoked');
     revoke?.({ code: 'SESSION_REVOKED', message: SESSION_REVOKED_MESSAGE });
     revoke?.({ code: 'SESSION_REVOKED', message: SESSION_REVOKED_MESSAGE });
@@ -110,8 +111,8 @@ describe('session termination', () => {
     });
   });
 
-  it.each(['SESSION_REVOKED', 'UNAUTHORIZED'])('handles an authentication handshake error with code %s', code => {
-    const socket = connectUser();
+  it.each(['SESSION_REVOKED', 'UNAUTHORIZED'])('handles an authentication handshake error with code %s', async code => {
+    const socket = await connectUser();
     socket.listeners.get('connect_error')?.({ data: { code, message: 'Please sign in again.' } });
 
     expect(useAuthStore.getState().authUser).toBeNull();
@@ -119,8 +120,8 @@ describe('session termination', () => {
     expect(toast.error).toHaveBeenCalledOnce();
   });
 
-  it('preserves authentication during a temporary connection failure', () => {
-    const socket = connectUser();
+  it('preserves authentication during a temporary connection failure', async () => {
+    const socket = await connectUser();
     socket.listeners.get('connect_error')?.(new Error('Connection timeout'));
 
     expect(useAuthStore.getState().authUser).toEqual(user);
@@ -129,10 +130,11 @@ describe('session termination', () => {
   });
 
   it('ignores old socket revocation and presence events after a fresh login', async () => {
-    const previousSocket = connectUser();
+    const previousSocket = await connectUser();
     const newUser = { ...user, _id: 'user-2' };
     vi.mocked(apiService.post).mockResolvedValueOnce({ user: newUser });
     await useAuthStore.getState().login({ email: newUser.email, password: 'password' });
+    await useAuthStore.getState().connectSocket();
     const newSocket = useAuthStore.getState().socket;
 
     previousSocket.listeners.get('session:revoked')?.({ message: SESSION_REVOKED_MESSAGE });
@@ -144,21 +146,50 @@ describe('session termination', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it('disconnects a socket even while it is still connecting and allows a new connection', () => {
-    const socket = connectUser();
+  it('disconnects a socket even while it is still connecting and allows a new connection', async () => {
+    const socket = await connectUser();
     useAuthStore.getState().disconnectSocket();
     expect(socket.disconnect).toHaveBeenCalledOnce();
     expect(useAuthStore.getState().socket).toBeNull();
 
-    useAuthStore.getState().connectSocket();
+    await useAuthStore.getState().connectSocket();
     expect(useAuthStore.getState().socket).not.toBeNull();
     expect(useAuthStore.getState().socket).not.toBe(socket);
   });
 
-  it('does not create duplicate sockets while connecting', () => {
-    connectUser();
-    useAuthStore.getState().connectSocket();
+  it('does not create duplicate sockets while connecting', async () => {
+    useAuthStore.setState({ authUser: user });
+    await Promise.all([
+      useAuthStore.getState().connectSocket(),
+      useAuthStore.getState().connectSocket(),
+    ]);
     expect(io).toHaveBeenCalledOnce();
+  });
+
+  it('does not create a socket when logout invalidates a pending module import', async () => {
+    useAuthStore.setState({ authUser: user });
+    const connecting = useAuthStore.getState().connectSocket();
+    useAuthStore.getState().forceLogout(SESSION_REVOKED_MESSAGE);
+    await connecting;
+
+    expect(io).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().socket).toBeNull();
+  });
+
+  it('allows a new connection while an earlier session is still loading the socket module', async () => {
+    useAuthStore.setState({ authUser: user });
+    const previousConnection = useAuthStore.getState().connectSocket();
+    advanceAuthSession();
+    useAuthStore.getState().disconnectSocket();
+    const nextUser = { ...user, _id: 'new-user' };
+    useAuthStore.setState({ authUser: nextUser });
+    const nextConnection = useAuthStore.getState().connectSocket();
+    await Promise.all([previousConnection, nextConnection]);
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(io).toHaveBeenCalledOnce();
+    expect(useAuthStore.getState().authUser).toEqual(nextUser);
+    expect(useAuthStore.getState().socket).not.toBeNull();
   });
 
   it('does not restore a stale auth check over a newer login', async () => {
@@ -188,8 +219,8 @@ describe('session termination', () => {
     expect(toast.success).not.toHaveBeenCalled();
   });
 
-  it('handles only the first HTTP failure for a revoked session', () => {
-    connectUser();
+  it('handles only the first HTTP failure for a revoked session', async () => {
+    await connectUser();
     const failure = {
       version: getAuthSessionVersion(), code: 'SESSION_REVOKED', message: SESSION_REVOKED_MESSAGE,
     };
@@ -201,7 +232,7 @@ describe('session termination', () => {
   });
 
   it('detaches before manual logout so its own revocation event does not add an error toast', async () => {
-    const socket = connectUser();
+    const socket = await connectUser();
     const response = deferred<unknown>();
     vi.mocked(apiService.post).mockReturnValueOnce(response.promise);
     const loggingOut = useAuthStore.getState().logout();
@@ -215,7 +246,7 @@ describe('session termination', () => {
   });
 
   it('waits for a pending logout before sending a new login', async () => {
-    connectUser();
+    await connectUser();
     const response = deferred<unknown>();
     vi.mocked(apiService.post)
       .mockReturnValueOnce(response.promise)
@@ -235,11 +266,12 @@ describe('session termination', () => {
   });
 
   it('replaces the socket when a shared browser cookie now belongs to a different account', async () => {
-    const socket = connectUser();
+    const socket = await connectUser();
     const newUser = { ...user, _id: 'other-account' };
     const previousVersion = getAuthSessionVersion();
     vi.mocked(apiService.get).mockResolvedValueOnce(newUser);
     await useAuthStore.getState().checkAuth();
+    await useAuthStore.getState().connectSocket();
 
     expect(useAuthStore.getState().authUser).toEqual(newUser);
     expect(useAuthStore.getState().socket).not.toBe(socket);

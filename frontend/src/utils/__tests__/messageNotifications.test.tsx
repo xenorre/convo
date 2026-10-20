@@ -13,7 +13,7 @@ vi.mock('react-hot-toast', async importOriginal =>
 );
 
 vi.mock('@/pages/ChatPage', () => ({
-  default: () => {
+  default: function MockChatPage() {
     const selectedUser = useChatStore(state => state.selectedUser);
     return <p>{selectedUser ? `Chat with ${selectedUser.fullName}` : 'Choose a chat'}</p>;
   },
@@ -25,7 +25,9 @@ const checkAuth = useAuthStore.getState().checkAuth;
 
 describe('incoming message notification', () => {
   beforeEach(() => {
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
+    vi.stubGlobal('matchMedia', vi.fn(() => ({
+      matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
     useAuthStore.setState({
       authUser: account,
       isCheckingAuth: false,
@@ -72,7 +74,7 @@ describe('incoming message notification', () => {
     }
 
     expect(onOpen).toHaveBeenCalledOnce();
-    expect(screen.getByText('Chat with Anna')).toBeInTheDocument();
+    expect(await screen.findByText('Chat with Anna')).toBeInTheDocument();
     expect(useChatStore.getState().activeTab).toBe('chats');
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /Open chat with Anna/ })).not.toBeInTheDocument();

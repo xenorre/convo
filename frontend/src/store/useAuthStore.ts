@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { apiService } from '@/services/apiService';
 import toast from 'react-hot-toast';
 import type { AuthState, AuthUser } from '@/types/auth';
-import { io } from 'socket.io-client';
 import type { AppSocket } from '@/types/socket';
 import { env } from '@/config/env';
 import { createApiError, handleStoreError, isAuthError } from '@/utils/errorHandling';
@@ -18,6 +17,14 @@ import {
 
 let latestAuthCheck = 0;
 let pendingLogout: Promise<void> | undefined;
+let latestSocketConnection = 0;
+let pendingSocketConnection: Promise<void> | undefined;
+let socketClientModule: Promise<typeof import('socket.io-client')> | undefined;
+
+const loadSocketClient = () => socketClientModule ??= import('socket.io-client').catch(error => {
+  socketClientModule = undefined;
+  throw error;
+});
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   authUser: null,
@@ -134,43 +141,67 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   connectSocket: () => {
-    if (!get().authUser || get().socket) return;
+    const authUser = get().authUser;
+    if (!authUser || get().socket) return Promise.resolve();
+    if (pendingSocketConnection) return pendingSocketConnection;
     const sessionVersion = getAuthSessionVersion();
-    const socket: AppSocket = io(env.wsUrl, {
-      withCredentials: true,
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-      timeout: 20000,
-      forceNew: false,
-      autoConnect: false,
-    });
-    const isCurrentSocket = () =>
-      get().socket === socket && isCurrentAuthSession(sessionVersion);
+    const userId = authUser._id;
+    const request = ++latestSocketConnection;
+    const isCurrentConnection = () => request === latestSocketConnection
+      && isCurrentAuthSession(sessionVersion) && get().authUser?._id === userId;
 
-    set({ socket });
-    socket.on('getOnlineUsers', userIds => {
-      if (isCurrentSocket()) set({ onlineUsers: userIds });
+    // Load the chat lifecycle before connecting so even the first incoming
+    // packet has handlers on every private route. Cancelled sessions must not
+    // create sockets when either module finishes loading later.
+    const connection = Promise.all([
+      loadSocketClient(),
+      import('./useChatStore'),
+    ]).then(([{ io }]) => {
+      if (!isCurrentConnection() || get().socket) return;
+      const socket: AppSocket = io(env.wsUrl, {
+        withCredentials: true,
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+        timeout: 20000,
+        forceNew: false,
+        autoConnect: false,
+      });
+      const isCurrentSocket = () =>
+        get().socket === socket && isCurrentAuthSession(sessionVersion);
+
+      set({ socket });
+      socket.on('getOnlineUsers', userIds => {
+        if (isCurrentSocket()) set({ onlineUsers: userIds });
+      });
+      socket.on('session:revoked', data => {
+        if (isCurrentSocket()) get().forceLogout(data.message || SESSION_REVOKED_MESSAGE, sessionVersion);
+      });
+      socket.on('connect_error', error => {
+        if (!isCurrentSocket()) return;
+        const data = (error as Error & { data?: { code?: string; message?: string } }).data;
+        if (data?.code === 'SESSION_REVOKED' || data?.code === 'UNAUTHORIZED') {
+          get().forceLogout(
+            data.message || (data.code === 'SESSION_REVOKED' ? SESSION_REVOKED_MESSAGE : SESSION_EXPIRED_MESSAGE),
+            sessionVersion
+          );
+        }
+      });
+      socket.connect();
+    }).catch(error => {
+      if (isCurrentConnection()) handleStoreError(error, 'Could not connect to chat. Please reload the page.');
+    }).finally(() => {
+      if (pendingSocketConnection === connection) pendingSocketConnection = undefined;
     });
-    socket.on('session:revoked', data => {
-      if (isCurrentSocket()) get().forceLogout(data.message || SESSION_REVOKED_MESSAGE, sessionVersion);
-    });
-    socket.on('connect_error', error => {
-      if (!isCurrentSocket()) return;
-      const data = (error as Error & { data?: { code?: string; message?: string } }).data;
-      if (data?.code === 'SESSION_REVOKED' || data?.code === 'UNAUTHORIZED') {
-        get().forceLogout(
-          data.message || (data.code === 'SESSION_REVOKED' ? SESSION_REVOKED_MESSAGE : SESSION_EXPIRED_MESSAGE),
-          sessionVersion
-        );
-      }
-    });
-    socket.connect();
+    pendingSocketConnection = connection;
+    return connection;
   },
 
   disconnectSocket: () => {
+    latestSocketConnection++;
+    pendingSocketConnection = undefined;
     const socket = get().socket;
     set({ socket: null, onlineUsers: [] });
     if (!socket) return;

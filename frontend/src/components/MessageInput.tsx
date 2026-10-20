@@ -145,7 +145,7 @@ function MessageInput() {
           type="submit"
           aria-label="Send message"
           disabled={!text.trim() && !imagePreview}
-          className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 text-white shadow-sm shadow-cyan-950/30 transition-colors hover:from-cyan-400 hover:to-cyan-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-600 to-cyan-700 text-white shadow-sm shadow-cyan-950/30 transition-colors hover:from-cyan-700 hover:to-cyan-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <SendIcon className="w-5 h-5" />
         </button>

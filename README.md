@@ -120,6 +120,21 @@ Frontend (Vite variables):
   - `make prod-up` / `make prod-down`
   - `make k8s-apply` / `make k8s-delete`
 
+## Measuring frontend performance
+
+Run Lighthouse against the production build. The Vite development server on port 5173 includes development tooling and unminified modules, so its scores are not a production performance baseline.
+
+With the local backend running on port 3000, build and preview the frontend:
+
+```bash
+VITE_API_URL=http://localhost:3000/api VITE_WS_URL=http://localhost:3000 npm run build --prefix frontend
+npm run preview --prefix frontend -- --host localhost
+```
+
+Open `http://localhost:4173/login` and select Lighthouse's Desktop mode. Compare the same route and authentication state, keep the device settings fixed, and use the median of three runs. Compare FCP, LCP, TBT, CLS, and transferred JavaScript/CSS as well as the overall score.
+
+Production telemetry is opt-in through `VITE_LOG_ENDPOINT`, `VITE_METRICS_ENDPOINT`, and `VITE_HEALTH_ENDPOINT`. Leave these unset unless the receiving endpoints exist; unconfigured telemetry does not generate background requests.
+
 ## Architecture (high-level)
 
 - Backend (backend/src)

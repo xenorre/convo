@@ -11,7 +11,8 @@ export const ProtectedRoute = ({
   children,
   redirectTo = "/login",
 }: ProtectedRouteProps) => {
-  const { authUser, isCheckingAuth } = useAuthStore();
+  const authUser = useAuthStore(state => state.authUser);
+  const isCheckingAuth = useAuthStore(state => state.isCheckingAuth);
 
   if (isCheckingAuth) {
     return <PageLoader />;
@@ -28,11 +29,7 @@ export const PublicRoute = ({
   children,
   redirectTo = "/",
 }: ProtectedRouteProps) => {
-  const { authUser, isCheckingAuth } = useAuthStore();
-
-  if (isCheckingAuth) {
-    return <PageLoader />;
-  }
+  const authUser = useAuthStore(state => state.authUser);
 
   if (authUser) {
     return <Navigate to={redirectTo} replace />;

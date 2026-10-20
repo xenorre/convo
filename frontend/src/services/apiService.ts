@@ -53,8 +53,9 @@ export class ApiService {
       async config => {
         const sessionConfig = config as SessionRequestConfig;
         sessionConfig._authSessionVersion ??= getAuthSessionVersion();
-        // Add CSRF token to requests
-        await this.ensureCSRFToken();
+        // Safe requests do not need a CSRF token. In particular, the initial
+        // auth check must not wait for a separate token bootstrap waterfall.
+        if (this.isWriteOperation(config.method)) await this.ensureCSRFToken();
         if (!isCurrentAuthSession(sessionConfig._authSessionVersion)) {
           return Promise.reject(staleSessionError());
         }

@@ -27,6 +27,14 @@ import {
   ensureCsrfTokenCookie,
   csrfProtection,
 } from "#src/middleware/csrf.middleware.js";
+import {
+  serveImmutableAssets,
+  servePublicFiles,
+} from "#src/middleware/static.middleware.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.resolve(__dirname, "../public");
 
 // Core middleware
 app.set("trust proxy", trustedProxies);
@@ -52,6 +60,11 @@ app.use(
 // Preflight: cors() above handles OPTIONS automatically in Express 5
 
 // app.use(securityMiddleware);
+
+// Static build assets do not need a CSRF cookie and can be shared-cacheable.
+if (ENV.NODE_ENV === "production") {
+  app.use("/assets", serveImmutableAssets(publicDir));
+}
 
 // CSRF token issuance for safe methods and endpoint to fetch it
 app.use(ensureCsrfTokenCookie);
@@ -82,15 +95,14 @@ if (ENV.NODE_ENV !== "production") {
 }
 
 // Serve frontend in production if present
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicDir = path.resolve(__dirname, "../public");
 if (ENV.NODE_ENV === "production") {
-  app.use(express.static(publicDir));
+  app.use(servePublicFiles(publicDir));
   // Match any path that does NOT start with /api or /socket.io
   const spaFallback = /^(?!\/api|\/socket\.io).*/;
   app.get(spaFallback, (req, res) => {
-    res.sendFile(path.join(publicDir, "index.html"));
+    res.sendFile(path.join(publicDir, "index.html"), {
+      headers: { "Cache-Control": "no-cache" },
+    });
   });
 }
 

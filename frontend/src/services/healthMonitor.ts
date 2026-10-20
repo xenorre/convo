@@ -45,72 +45,58 @@ class HealthMonitor {
   constructor() {
     this.startTime = Date.now();
     this.errorCounts = { js: 0, network: 0, render: 0 };
-    
-    if (env.isProduction) {
-      this.startMonitoring();
-    }
   }
 
   startMonitoring() {
-    if (this.isMonitoring) return;
+    if (this.isMonitoring || (!env.metricsEndpoint && !env.healthEndpoint)) return;
     
     this.isMonitoring = true;
     
     // Monitor JavaScript errors
-    window.addEventListener('error', (event) => {
+    window.addEventListener('error', () => {
       this.errorCounts.js++;
-      logger.error('JavaScript error detected', {
-        component: 'HealthMonitor',
-        metadata: {
-          message: event.message,
-          filename: event.filename,
-          lineno: event.lineno,
-          colno: event.colno,
-        },
-      });
     });
 
     // Monitor unhandled promise rejections
-    window.addEventListener('unhandledrejection', (event) => {
+    window.addEventListener('unhandledrejection', () => {
       this.errorCounts.js++;
-      logger.error('Unhandled promise rejection', {
-        component: 'HealthMonitor',
-        metadata: {
-          reason: event.reason,
-        },
-      });
     });
 
     // Monitor performance
-    if ('performance' in window) {
-      // Log performance metrics on page load
-      window.addEventListener('load', () => {
+    if (env.metricsEndpoint) {
+      const schedulePerformanceMetrics = () => {
         setTimeout(() => {
           this.logPerformanceMetrics();
         }, 1000);
-      });
+      };
+
+      if (document.readyState === 'complete') {
+        schedulePerformanceMetrics();
+      } else {
+        window.addEventListener('load', schedulePerformanceMetrics, { once: true });
+      }
     }
 
     // Periodic health checks
-    setInterval(() => {
-      this.performHealthCheck();
-    }, 60000); // Every minute
+    if (env.healthEndpoint) {
+      setInterval(() => {
+        this.performHealthCheck();
+      }, 60000); // Every minute
+    }
 
     logger.info('Health monitoring started', { component: 'HealthMonitor' });
   }
 
   private logPerformanceMetrics() {
-    if (!performance.timing) return;
-
-    const timing = performance.timing;
-    const navigationStart = timing.navigationStart;
+    const timing = this.getNavigationTiming();
+    if (!timing) return;
     
     const metrics = {
-      navigation: timing.loadEventEnd - navigationStart,
+      navigation: timing.loadEventEnd || timing.duration,
       loadComplete: timing.loadEventEnd - timing.loadEventStart,
-      domContentLoaded: timing.domContentLoadedEventEnd - navigationStart,
-      domReady: timing.domComplete - navigationStart,
-      firstByte: timing.responseStart - navigationStart,
+      domContentLoaded: timing.domContentLoadedEventEnd,
+      domReady: timing.domComplete,
+      firstByte: timing.responseStart,
     };
 
     logger.trackPerformance('page_load', metrics.navigation, {
@@ -128,8 +114,10 @@ class HealthMonitor {
   }
 
   private getMemoryInfo(): HealthMetrics['memory'] {
-    if ('memory' in performance) {
-      const memory = (performance as any).memory;
+    const memory = (performance as Performance & {
+      memory?: { usedJSHeapSize: number; totalJSHeapSize: number };
+    }).memory;
+    if (memory) {
       return {
         used: memory.usedJSHeapSize,
         total: memory.totalJSHeapSize,
@@ -167,18 +155,20 @@ class HealthMonitor {
   }
 
   private getPerformanceMetrics(): HealthMetrics['performance'] {
-    if (!performance.timing) {
+    const timing = this.getNavigationTiming();
+    if (!timing) {
       return { navigation: 0, loadComplete: 0, domContentLoaded: 0 };
     }
 
-    const timing = performance.timing;
-    const navigationStart = timing.navigationStart;
-
     return {
-      navigation: timing.loadEventEnd - navigationStart || 0,
+      navigation: timing.loadEventEnd || timing.duration || 0,
       loadComplete: timing.loadEventEnd - timing.loadEventStart || 0,
-      domContentLoaded: timing.domContentLoadedEventEnd - navigationStart || 0,
+      domContentLoaded: timing.domContentLoadedEventEnd || 0,
     };
+  }
+
+  private getNavigationTiming(): PerformanceNavigationTiming | undefined {
+    return performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming | undefined;
   }
 
   private performHealthCheck(): void {
@@ -197,14 +187,14 @@ class HealthMonitor {
     }
 
     // Send to monitoring endpoint if configured
-    if (env.isDevelopment === false) {
+    if (!env.isDevelopment && env.healthEndpoint) {
       this.sendHealthMetrics(status);
     }
   }
 
   private async sendHealthMetrics(status: HealthStatus): Promise<void> {
     try {
-      await fetch('/api/health/metrics', {
+      await fetch(env.healthEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
