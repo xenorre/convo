@@ -1,4 +1,4 @@
-import { XIcon } from "lucide-react";
+import { ArrowLeftIcon, UserRoundIcon, XIcon } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -23,36 +23,56 @@ function ChatHeader() {
   }, [setSelectedUser]);
 
   return (
-    <div
-      className="flex justify-between items-center bg-slate-800/50 border-b
-   border-slate-700/50 max-h-[84px] px-6 flex-1"
-    >
-      <div className="flex items-center space-x-3">
+    <header className="flex min-h-20 shrink-0 items-center gap-2 border-b border-slate-700/50 bg-slate-800/35 px-3 py-3 sm:gap-3 sm:px-6">
+      <button
+        type="button"
+        aria-label="Back to conversations"
+        onClick={() => setSelectedUser(null)}
+        className="icon-button -ml-1 md:hidden"
+      >
+        <ArrowLeftIcon className="size-5" aria-hidden="true" />
+      </button>
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <div
-          className={`avatar ${isOnline ? "avatar-online" : "avatar-offline"}`}
+          className={`avatar shrink-0 ${isOnline ? "avatar-online" : "avatar-offline"}`}
         >
-          <div className="w-12 rounded-full">
-            <img
-              src={selectedUser?.profilePic || "/avatar.png"}
-              alt={selectedUser?.fullName}
-            />
+          <div className="flex! size-11 items-center justify-center rounded-full bg-slate-700/70 ring-1 ring-white/10 sm:size-12">
+            {selectedUser?.profilePic ? (
+              <img
+                src={selectedUser.profilePic}
+                alt={selectedUser?.fullName}
+                className="size-full object-cover"
+              />
+            ) : (
+              <UserRoundIcon
+                className="size-5 text-slate-300"
+                aria-hidden="true"
+              />
+            )}
           </div>
         </div>
 
-        <div>
-          <h3 className="text-slate-200 font-medium">
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold text-slate-100 sm:text-base">
             {selectedUser?.fullName}
-          </h3>
-          <p className="text-slate-400 text-sm">
+          </h1>
+          <p
+            className={`mt-0.5 text-xs ${isOnline ? "text-cyan-400" : "text-slate-400"}`}
+          >
             {isOnline ? "Online" : "Offline"}
           </p>
         </div>
       </div>
 
-      <button onClick={() => setSelectedUser(null)}>
-        <XIcon className="w-5 h-5 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer" />
+      <button
+        type="button"
+        aria-label="Close conversation"
+        className="icon-button hidden md:inline-flex"
+        onClick={() => setSelectedUser(null)}
+      >
+        <XIcon className="size-5" aria-hidden="true" />
       </button>
-    </div>
+    </header>
   );
 }
 export default ChatHeader;

@@ -4,12 +4,12 @@ import AuthHero from "@/components/AuthHero";
 
 function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="w-full flex items-center justify-center p-4 bg-slate-900">
-      <div className="relative w-full max-w-6xl lg:h-[700px] h-[650px]">
+    <div className="flex w-full items-center justify-center px-3 py-6 sm:px-6 sm:py-10 lg:p-8">
+      <div className="relative w-full max-w-lg lg:max-w-6xl">
         <BorderAnimatedContainer>
-          <div className="w-full flex flex-col md:flex-row">
-            <div className="w-full lg:w-1/2 p-8 flex items-center justify-center md:border-r border-slate-600/30">
-              <div className="max-w-md w-full">
+          <div className="flex w-full min-w-0 flex-col lg:min-h-[700px] lg:flex-row">
+            <div className="flex w-full min-w-0 items-center justify-center p-5 sm:p-8 lg:w-1/2 lg:border-r lg:border-slate-600/25 lg:p-10 xl:p-14">
+              <div className="w-full max-w-md">
                 <ConvoLogo />
                 {children}
               </div>

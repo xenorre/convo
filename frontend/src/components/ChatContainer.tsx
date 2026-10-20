@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useEffect, useRef } from "react";
 import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 
 function ChatContainer() {
   const {
@@ -17,7 +18,8 @@ function ChatContainer() {
     unsubscribeFromMessage,
   } = useChatStore();
   const { authUser } = useAuthStore();
-  const messageEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (selectedUser && authUser && selectedUser._id) {
@@ -35,46 +37,58 @@ function ChatContainer() {
     selectedUser,
     authUser,
     getMessagesByUserId,
+    markRead,
     subscribeToMessages,
     unsubscribeFromMessage,
   ]);
 
   useEffect(() => {
-    if (messageEndRef.current) {
-      messageEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
+    const container = messagesRef.current;
+    container?.scrollTo({
+      top: container.scrollHeight,
+      behavior: prefersReducedMotion ? "instant" : "smooth",
+    });
+  }, [messages, prefersReducedMotion]);
 
   return (
     <>
       <ChatHeader />
-      <div className="flex-1 px-6 overflow-y-auto py-8">
+      <div
+        ref={messagesRef}
+        className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 sm:py-6"
+      >
         {messages.length > 0 && !isMessagesLoading ? (
-          <div className="max-w-3xl space-y-6">
+          <div className="mx-auto w-full max-w-3xl space-y-4 sm:space-y-5">
             {messages.map((msg) => {
               const myId = authUser?._id ? String(authUser._id) : "";
               const isMyMessage = String(msg.senderId) === myId;
               return (
                 <div
                   key={msg._id}
-                  className={`chat ${isMyMessage ? "chat-end" : "chat-start"}`}
+                  className={`chat min-w-0 ${isMyMessage ? "chat-end" : "chat-start"}`}
                 >
                   <div
-                    className={`chat-bubble relative ${
+                    className={`chat-bubble relative min-w-0 max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed [overflow-wrap:anywhere] sm:max-w-[80%] ${
                       isMyMessage
                         ? "bg-cyan-600 text-white"
-                        : "bg-slate-800 text-slate-200"
+                        : "border border-slate-700/50 bg-slate-800 text-slate-200"
                     }`}
                   >
                     {msg.image && (
                       <img
                         src={msg.image}
                         alt="Shared"
-                        className="rounded-lg h-48 object-cover"
+                        className="h-40 max-w-full rounded-xl object-cover sm:h-48"
                       />
                     )}
-                    {msg.text && <p className="mt-2">{msg.text}</p>}
-                    <p className="text-xs mt-1 opacity-75 flex items-center gap-1">
+                    {msg.text && (
+                      <p
+                        className={`${msg.image ? "mt-2" : ""} whitespace-pre-wrap`}
+                      >
+                        {msg.text}
+                      </p>
+                    )}
+                    <p className="mt-1.5 text-right text-[10px] leading-none opacity-65">
                       {msg.createdAt
                         ? new Date(msg.createdAt).toISOString().slice(11, 16)
                         : new Date().toISOString().slice(11, 16)}
@@ -83,7 +97,6 @@ function ChatContainer() {
                 </div>
               );
             })}
-            <div ref={messageEndRef} />
           </div>
         ) : isMessagesLoading ? (
           <MessagesLoadingSkeleton />

@@ -2,31 +2,41 @@ import { Check } from "lucide-react";
 
 function AuthHero() {
   return (
-    <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-[600px] h-[600px] rounded-full blur-[150px]" />
-      <div className="relative z-10 flex flex-col justify-center w-full px-20 py-20">
-        <div className="space-y-6 mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="text-xs font-medium text-blue-300 tracking-wide">
+    <div className="relative hidden min-w-0 overflow-hidden lg:flex lg:w-1/2">
+      <div
+        className="pointer-events-none absolute -right-48 -top-20 size-[520px] rounded-full bg-cyan-500/8 blur-[110px]"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute -bottom-32 -left-24 size-80 rounded-full bg-blue-500/8 blur-[100px]"
+        aria-hidden="true"
+      />
+      <div className="relative z-10 flex w-full flex-col justify-center px-10 py-14 xl:px-14">
+        <div className="mb-10 space-y-5">
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5">
+            <div
+              className="size-1.5 shrink-0 animate-pulse rounded-full bg-cyan-400"
+              aria-hidden="true"
+            />
+            <span className="text-xs font-medium tracking-wide text-cyan-300">
               TRUSTED BY 50,000+ USERS
             </span>
           </div>
 
-          <h2 className="text-4xl font-semibold text-white leading-tight tracking-tight max-w-lg">
+          <h2 className="max-w-lg text-3xl font-semibold leading-tight tracking-tight text-white xl:text-4xl">
             Connect with your team, anywhere
           </h2>
 
-          <p className="text-lg text-slate-400 leading-relaxed max-w-md">
+          <p className="max-w-md text-base leading-relaxed text-slate-400 xl:text-lg">
             Experience seamless communication with enterprise-grade security and
             reliability.
           </p>
         </div>
 
-        <div className="space-y-4 mb-16">
+        <div className="mb-10 space-y-5">
           <div className="flex items-start gap-3 group">
-            <div className="w-5 h-5 rounded-full bg-blue-500/10 flex items-center justify-center mt-0.5 group-hover:bg-blue-500/20 transition-colors">
-              <Check className="w-3 h-3 text-blue-400" />
+            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 transition-colors group-hover:bg-cyan-500/20">
+              <Check className="size-3.5 text-cyan-400" aria-hidden="true" />
             </div>
             <div>
               <h3 className="text-white font-medium mb-1">
@@ -39,8 +49,8 @@ function AuthHero() {
           </div>
 
           <div className="flex items-start gap-3 group">
-            <div className="w-5 h-5 rounded-full bg-blue-500/10 flex items-center justify-center mt-0.5 group-hover:bg-blue-500/20 transition-colors">
-              <Check className="w-3 h-3 text-blue-400" />
+            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 transition-colors group-hover:bg-cyan-500/20">
+              <Check className="size-3.5 text-cyan-400" aria-hidden="true" />
             </div>
             <div>
               <h3 className="text-white font-medium mb-1">
@@ -53,8 +63,8 @@ function AuthHero() {
           </div>
 
           <div className="flex items-start gap-3 group">
-            <div className="w-5 h-5 rounded-full bg-blue-500/10 flex items-center justify-center mt-0.5 group-hover:bg-blue-500/20 transition-colors">
-              <Check className="w-3 h-3 text-blue-400" />
+            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 transition-colors group-hover:bg-cyan-500/20">
+              <Check className="size-3.5 text-cyan-400" aria-hidden="true" />
             </div>
             <div>
               <h3 className="text-white font-medium mb-1">
@@ -67,20 +77,28 @@ function AuthHero() {
           </div>
         </div>
 
-        <div className="flex items-center gap-12 pt-8 border-t border-slate-800">
+        <div className="grid grid-cols-3 gap-4 border-t border-slate-600/25 pt-7">
           <div>
-            <div className="text-3xl font-semibold text-white mb-1">50K+</div>
-            <div className="text-sm text-slate-400">Active users</div>
+            <div className="mb-1 text-2xl font-semibold tracking-tight text-white xl:text-3xl">
+              50K+
+            </div>
+            <div className="text-xs text-slate-400 xl:text-sm">
+              Active users
+            </div>
           </div>
 
           <div>
-            <div className="text-3xl font-semibold text-white mb-1">99.9%</div>
-            <div className="text-sm text-slate-400">Uptime</div>
+            <div className="mb-1 text-2xl font-semibold tracking-tight text-white xl:text-3xl">
+              99.9%
+            </div>
+            <div className="text-xs text-slate-400 xl:text-sm">Uptime</div>
           </div>
 
           <div>
-            <div className="text-3xl font-semibold text-white mb-1">4.9★</div>
-            <div className="text-sm text-slate-400">User rating</div>
+            <div className="mb-1 text-2xl font-semibold tracking-tight text-white xl:text-3xl">
+              4.9★
+            </div>
+            <div className="text-xs text-slate-400 xl:text-sm">User rating</div>
           </div>
         </div>
       </div>

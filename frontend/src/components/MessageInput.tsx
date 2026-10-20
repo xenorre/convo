@@ -15,28 +15,30 @@ function MessageInput() {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const trimmedText = text.trim();
-    
+
     // Validation
     if (!trimmedText && !imagePreview) {
       toast.error("Please enter a message or select an image");
       return;
     }
-    
+
     if (trimmedText && !validateMessage(trimmedText)) {
-      toast.error(`Message must be between 1 and ${env.maxMessageLength} characters`);
+      toast.error(
+        `Message must be between 1 and ${env.maxMessageLength} characters`,
+      );
       return;
     }
 
     // Sanitize and send
     const sanitizedText = trimmedText ? sanitizeInput(trimmedText) : undefined;
-    
+
     sendMessage({
       text: sanitizedText,
       image: imagePreview,
     });
-    
+
     setText("");
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -51,10 +53,12 @@ function MessageInput() {
       toast.error("Please select an image file");
       return;
     }
-    
+
     // File size validation
     if (file.size > env.maxFileSize) {
-      toast.error(`Image size must be less than ${Math.round(env.maxFileSize / 1024 / 1024)}MB`);
+      toast.error(
+        `Image size must be less than ${Math.round(env.maxFileSize / 1024 / 1024)}MB`,
+      );
       return;
     }
 
@@ -73,7 +77,7 @@ function MessageInput() {
   };
 
   return (
-    <div className="p-4 border-t border-slate-700/50">
+    <div className="shrink-0 border-t border-slate-700/50 bg-slate-900/60 p-3 sm:p-4">
       {imagePreview && (
         <div className="max-w-3xl mx-auto mb-3 flex items-center">
           <div className="relative">
@@ -84,8 +88,9 @@ function MessageInput() {
             />
             <button
               onClick={removeImage}
-              className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-slate-200 hover:bg-slate-700"
+              className="absolute -top-2 -right-2 flex size-11 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-slate-200 shadow-lg hover:bg-slate-700"
               type="button"
+              aria-label="Remove image"
             >
               <XIcon className="w-4 h-4" />
             </button>
@@ -95,7 +100,7 @@ function MessageInput() {
 
       <form
         onSubmit={handleSendMessage}
-        className="max-w-3xl mx-auto flex space-x-4"
+        className="mx-auto flex max-w-3xl min-w-0 items-center gap-1.5 rounded-2xl border border-slate-700/70 bg-slate-800/60 p-1.5 transition-colors focus-within:border-cyan-500/60 focus-within:ring-2 focus-within:ring-cyan-500/10 sm:gap-2"
       >
         <input
           type="text"
@@ -106,15 +111,16 @@ function MessageInput() {
               setText(value);
             }
           }}
-          className="flex-1 bg-slate-800/50 border border-slate-700/50 rounded-lg py-2 px-4 text-slate-200 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+          className="min-h-11 min-w-0 flex-1 rounded-xl bg-transparent px-2 py-2 text-base text-slate-200 outline-none placeholder:text-slate-500 focus-visible:outline-none sm:px-3"
           placeholder="Type your message..."
+          aria-label="Message"
+          aria-describedby={
+            text.length > env.maxMessageLength * 0.8
+              ? "message-length"
+              : undefined
+          }
           maxLength={env.maxMessageLength}
         />
-        {text.length > env.maxMessageLength * 0.8 && (
-          <div className="absolute bottom-16 right-4 text-xs text-slate-400">
-            {text.length}/{env.maxMessageLength}
-          </div>
-        )}
 
         <input
           type="file"
@@ -126,21 +132,32 @@ function MessageInput() {
 
         <button
           type="button"
+          aria-label="Attach image"
+          aria-pressed={Boolean(imagePreview)}
           onClick={() => fileInputRef.current?.click()}
-          className={`bg-slate-800/50 text-slate-400 hover:text-slate-200 rounded-lg px-4 transition-colors ${
-            imagePreview ? "text-cyan-500" : ""
+          className={`icon-button ${
+            imagePreview ? "bg-cyan-500/10 text-cyan-400" : ""
           }`}
         >
           <ImageIcon className="w-5 h-5" />
         </button>
         <button
           type="submit"
+          aria-label="Send message"
           disabled={!text.trim() && !imagePreview}
-          className="bg-gradient-to-r from-cyan-500 to-cyan-600 text-white rounded-lg px-4 py-2 font-medium hover:from-cyan-600 hover:to-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 text-white shadow-sm shadow-cyan-950/30 transition-colors hover:from-cyan-400 hover:to-cyan-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <SendIcon className="w-5 h-5" />
         </button>
       </form>
+      {text.length > env.maxMessageLength * 0.8 && (
+        <p
+          id="message-length"
+          className="mx-auto mt-2 max-w-3xl text-right text-xs text-slate-400"
+        >
+          {text.length}/{env.maxMessageLength}
+        </p>
+      )}
     </div>
   );
 }

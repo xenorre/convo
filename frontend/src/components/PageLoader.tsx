@@ -5,7 +5,11 @@ function PageLoader() {
   const prefersReducedMotion = useReducedMotion();
 
   return (
-    <div className="flex items-center justify-center h-screen">
+    <div
+      role="status"
+      aria-label="Loading"
+      className="flex min-h-dvh items-center justify-center bg-slate-950 text-cyan-400"
+    >
       {prefersReducedMotion ? (
         // Static loader for users who prefer reduced motion
         <div className="flex items-center gap-2 text-slate-400">

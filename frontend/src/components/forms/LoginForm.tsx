@@ -10,31 +10,33 @@ function LoginForm() {
     email: "",
     password: "",
   });
-  const [errors, setErrors] = useState<{email?: string; password?: string}>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>(
+    {},
+  );
   const { login, isLoggingIn } = useAuthStore();
 
   const validateForm = () => {
-    const newErrors: {email?: string; password?: string} = {};
-    
+    const newErrors: { email?: string; password?: string } = {};
+
     if (!formData.email) {
       newErrors.email = "Email is required";
     } else if (!validateEmail(formData.email)) {
       newErrors.email = "Please enter a valid email address";
     }
-    
+
     if (!formData.password) {
       newErrors.password = "Password is required";
     } else if (formData.password.length < 6) {
       newErrors.password = "Password must be at least 6 characters";
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       toast.error("Please fix the errors below");
       return;
@@ -49,69 +51,110 @@ function LoginForm() {
   };
   return (
     <>
-      {" "}
-      <div className="space-y-3 mb-10">
-        <h1 className="text-3xl font-semibold text-white tracking-tight">
+      <div className="mb-7 space-y-2 sm:mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
           Welcome Back
         </h1>
-        <p className="text-slate-400">Login to access your account</p>
+        <p className="text-sm text-slate-400 sm:text-base">
+          Login to access your account
+        </p>
       </div>
-      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <div>
-          <label className="auth-input-label">Email</label>
+          <label htmlFor="login-email" className="auth-input-label">
+            Email
+          </label>
           <div className="relative">
-            <MailIcon className="auth-input-icon" />
+            <MailIcon className="auth-input-icon" aria-hidden="true" />
             <input
+              id="login-email"
+              name="email"
               type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              aria-invalid={Boolean(errors.email)}
+              aria-describedby={errors.email ? "login-email-error" : undefined}
               value={formData.email}
               onChange={(e) => {
                 setFormData({ ...formData, email: e.target.value });
                 if (errors.email) {
-                  setErrors(prev => ({ ...prev, email: undefined }));
+                  setErrors((prev) => ({ ...prev, email: undefined }));
                 }
               }}
-              className={`input ${errors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
+              className={`auth-input ${errors.email ? "border-red-500 focus:ring-red-500" : ""}`}
               placeholder="johndoe@example.com"
               autoComplete="email"
             />
-            {errors.email && (
-              <p className="mt-1 text-sm text-red-400">{errors.email}</p>
-            )}
           </div>
+          {errors.email && (
+            <p
+              id="login-email-error"
+              role="alert"
+              className="mt-2 text-sm leading-relaxed text-red-400"
+            >
+              {errors.email}
+            </p>
+          )}
         </div>
 
         <div>
-          <label className="auth-input-label">Password</label>
+          <label htmlFor="login-password" className="auth-input-label">
+            Password
+          </label>
           <div className="relative">
-            <LockIcon className="auth-input-icon" />
+            <LockIcon className="auth-input-icon" aria-hidden="true" />
             <input
+              id="login-password"
+              name="password"
               type="password"
+              aria-invalid={Boolean(errors.password)}
+              aria-describedby={
+                errors.password ? "login-password-error" : undefined
+              }
               value={formData.password}
               onChange={(e) => {
                 setFormData({ ...formData, password: e.target.value });
                 if (errors.password) {
-                  setErrors(prev => ({ ...prev, password: undefined }));
+                  setErrors((prev) => ({ ...prev, password: undefined }));
                 }
               }}
-              className={`input ${errors.password ? 'border-red-500 focus:ring-red-500' : ''}`}
+              className={`auth-input ${errors.password ? "border-red-500 focus:ring-red-500" : ""}`}
               placeholder="••••••••"
               autoComplete="current-password"
             />
-            {errors.password && (
-              <p className="mt-1 text-sm text-red-400">{errors.password}</p>
-            )}
           </div>
+          {errors.password && (
+            <p
+              id="login-password-error"
+              role="alert"
+              className="mt-2 text-sm leading-relaxed text-red-400"
+            >
+              {errors.password}
+            </p>
+          )}
         </div>
 
         <button
           className="auth-btn"
           type="submit"
           disabled={isLoggingIn}
+          aria-busy={isLoggingIn}
         >
-          {isLoggingIn ? <LoaderCircle className="animate-spin" /> : "Sign In"}
+          {isLoggingIn ? (
+            <>
+              <LoaderCircle
+                className="size-5 animate-spin"
+                aria-hidden="true"
+              />
+              <span className="sr-only">Sign In</span>
+            </>
+          ) : (
+            "Sign In"
+          )}
         </button>
       </form>
-      <div className="mt-6 text-center">
+      <div className="mt-7 border-t border-slate-600/25 pt-5 text-center">
         <Link to="/sign-up" className="auth-link">
           Don't have an account? Sign Up
         </Link>

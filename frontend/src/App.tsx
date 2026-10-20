@@ -5,7 +5,6 @@ import SignUp from "@/pages/SignUp";
 import RootLayout from "@/RootLayout";
 import { ProtectedRoute, PublicRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ConnectionStatus } from "@/components/ConnectionStatus";
 import { useEffect } from "react";
 import { useAuthStore } from "./store/useAuthStore";
 import { useChatStore } from "@/store/useChatStore";
@@ -72,7 +71,6 @@ function App() {
           </Route>
         </Routes>
       </ErrorBoundary>
-      {authUser ? <ConnectionStatus /> : null}
       <AppToaster />
     </>
   );
