@@ -343,6 +343,20 @@ describe('chat list order and last message', () => {
     expect(useChatStore.getState().messages.map(msg => msg._id)).toEqual(['sent-id']);
   });
 
+  it('explains why the server refused a message', async () => {
+    const toast = (await import('react-hot-toast')).default;
+    const toastError = vi.spyOn(toast, 'error');
+    useChatStore.setState({ selectedUser: sender });
+    vi.mocked(apiService.post).mockRejectedValueOnce({
+      status: 403, message: 'Only their friends can start a conversation with them', code: 'MESSAGE_FRIENDS_ONLY',
+    });
+
+    await useChatStore.getState().sendMessage({ text: 'hello' });
+
+    expect(toastError).toHaveBeenCalledWith('Only their friends can start a conversation with them');
+    expect(useChatStore.getState().messages).toEqual([]);
+  });
+
   it('does not touch the chat list when sending fails', async () => {
     const chats = [summary(quiet, '2026-10-19T10:00:00.000Z')];
     useChatStore.setState({ chats, selectedUser: sender });

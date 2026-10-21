@@ -15,6 +15,32 @@ export type RelationshipState = "none" | "friends" | "outgoing" | "incoming";
 
 export interface UserSearchResult extends Contact {
   relationship: { state: RelationshipState; friendRequestId?: string };
+  // What their privacy settings allow; the server checks again on use.
+  canRequest: boolean;
+  canMessage: boolean;
+}
+
+export interface BlockedUser extends Contact {
+  blockedAt: string;
+}
+
+export interface BlockedUsersResponse {
+  users: BlockedUser[];
+}
+
+export interface BlockResponse {
+  status: "blocked";
+  endedFriendRequestId: string | null;
+}
+
+export interface PrivacySettings {
+  allowMessagesFrom: "everyone" | "friends";
+  allowFriendRequestsFrom: "everyone" | "nobody";
+  showOnlineStatus: boolean;
+}
+
+export interface PrivacySettingsResponse {
+  privacy: PrivacySettings;
 }
 
 export interface FriendsResponse {

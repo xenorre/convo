@@ -8,6 +8,8 @@ import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { formatMessageTime } from "@/utils/chatTimestamp";
 import { onWindowReturn } from "@/utils/windowAttention";
+import { useFriendsStore } from "@/store/useFriendsStore";
+import BlockedConversationNotice from "./friends/BlockedConversationNotice";
 
 function ChatContainer() {
   const {
@@ -22,6 +24,9 @@ function ChatContainer() {
     isReadingConversation,
   } = useChatStore();
   const { authUser } = useAuthStore();
+  const isBlocked = useFriendsStore((state) =>
+    state.blocked.some(({ _id }) => _id === selectedUser?._id),
+  );
   const messagesRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -127,7 +132,7 @@ function ChatContainer() {
           />
         )}
       </div>
-      <MessageInput />
+      {isBlocked && selectedUser ? <BlockedConversationNotice user={selectedUser} /> : <MessageInput />}
     </>
   );
 }

@@ -5,7 +5,7 @@ import { create } from "zustand";
 import { useAuthStore } from "./useAuthStore";
 import type { Message } from "@/types/message";
 import type { Contact } from "@/types/auth";
-import { handleStoreError } from "@/utils/errorHandling";
+import { createApiError, handleStoreError } from "@/utils/errorHandling";
 import { notifyIncomingMessage } from "@/utils/messageNotifications";
 import { isWindowInView } from "@/utils/windowAttention";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
@@ -244,7 +244,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }));
     } catch (e) {
       if (!isCurrentAuthSession(sessionVersion)) return;
-      handleStoreError(e, "Failed to send message");
+      const apiError = createApiError(e);
+      handleStoreError(e, apiError.status === 403 ? apiError.message : "Failed to send message");
 
       // Remove optimistic message on error
       set((state) => ({

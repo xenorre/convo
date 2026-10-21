@@ -10,7 +10,8 @@ import type { Friend, FriendRequest } from "@/types/friends";
 import { filterChats } from "@/utils/chatSearch";
 import AddFriendPanel from "./AddFriendPanel";
 import PersonRow from "./PersonRow";
-import { iconAction, rowPrimaryButton, rowSecondaryButton } from "./styles";
+import BlockConfirm from "./BlockConfirm";
+import { iconAction, rowDangerButton, rowPrimaryButton, rowSecondaryButton } from "./styles";
 
 function SectionHeading({ children }: { children: ReactNode }) {
   return (
@@ -76,7 +77,7 @@ function RequestRow({ request, direction }: { request: FriendRequest; direction:
 function FriendRow({ friend, isOnline }: { friend: Friend; isOnline: boolean }) {
   const { selectedUser, setSelectedUser } = useChatStore();
   const removeFriend = useFriendsStore((state) => state.removeFriend);
-  const [showActions, setShowActions] = useState(false);
+  const [actions, setActions] = useState<"closed" | "menu" | "block">("closed");
   const [isRemoving, setIsRemoving] = useState(false);
   const actionsId = useId();
   const isSelected = selectedUser?._id === friend._id;
@@ -110,26 +111,29 @@ function FriendRow({ friend, isOnline }: { friend: Friend; isOnline: boolean }) 
           type="button"
           className={iconAction}
           aria-label={`More actions for ${friend.fullName}`}
-          aria-expanded={showActions}
+          aria-expanded={actions !== "closed"}
           aria-controls={actionsId}
-          onClick={() => setShowActions((open) => !open)}
+          onClick={() => setActions((open) => (open === "closed" ? "menu" : "closed"))}
         >
           <MoreHorizontalIcon className="size-5" aria-hidden="true" />
         </button>
       </div>
-      {showActions && (
+      {actions === "menu" && (
         <div id={actionsId} className="flex flex-wrap gap-2 px-3 pb-3">
-          <button
-            type="button"
-            className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={isRemoving}
-            onClick={remove}
-          >
+          <button type="button" className={rowDangerButton} disabled={isRemoving} onClick={remove}>
             {isRemoving ? "Removing…" : "Remove friend"}
           </button>
-          <button type="button" className={rowSecondaryButton} onClick={() => setShowActions(false)}>
+          <button type="button" className={rowSecondaryButton} disabled={isRemoving} onClick={() => setActions("block")}>
+            Block
+          </button>
+          <button type="button" className={rowSecondaryButton} onClick={() => setActions("closed")}>
             Cancel
           </button>
+        </div>
+      )}
+      {actions === "block" && (
+        <div id={actionsId} className="px-3 pb-3">
+          <BlockConfirm user={friend} onDone={() => setActions("closed")} />
         </div>
       )}
     </div>

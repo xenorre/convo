@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeftIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, MessageCircleIcon, XIcon } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import SearchField from "@/components/SearchField";
 import UsersLoadingSkeleton from "@/components/UsersLoadingSkeleton";
@@ -7,7 +7,8 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { apiService } from "@/services/apiService";
 import { useChatStore } from "@/store/useChatStore";
 import { useFriendsStore } from "@/store/useFriendsStore";
-import type { RelationshipState, UserSearchResponse, UserSearchResult } from "@/types/friends";
+import type { UserSearchResponse, UserSearchResult } from "@/types/friends";
+import { useRelationship, type LiveRelationship } from "@/hooks/useRelationship";
 import { createApiError } from "@/utils/errorHandling";
 import PersonRow from "./PersonRow";
 import { iconAction, rowPrimaryButton, rowSecondaryButton } from "./styles";
@@ -22,30 +23,19 @@ type SearchState =
   | { status: "error"; message: string }
   | { status: "done"; users: UserSearchResult[] };
 
-const RELATIONSHIP_DETAIL: Record<RelationshipState, string> = {
+const RELATIONSHIP_DETAIL: Record<LiveRelationship, string> = {
   none: "Not friends yet",
+  blocked: "Blocked",
   outgoing: "Request sent",
   incoming: "Wants to be your friend",
   friends: "Already friends",
 };
 
-// The friends store follows every change live, so it wins over the
-// relationship the server reported when the search ran.
-function useRelationship(user: UserSearchResult) {
-  const { friends, incoming, outgoing, hasLoaded } = useFriendsStore();
-  if (!hasLoaded) return { state: user.relationship.state, request: undefined };
-  if (friends.some(({ _id }) => _id === user._id)) return { state: "friends" as const, request: undefined };
-  const sent = outgoing.find((request) => request.user._id === user._id);
-  if (sent) return { state: "outgoing" as const, request: sent };
-  const received = incoming.find((request) => request.user._id === user._id);
-  if (received) return { state: "incoming" as const, request: received };
-  return { state: "none" as const, request: undefined };
-}
-
 function ResultRow({ user }: { user: UserSearchResult }) {
   const { sendRequest, acceptRequest, cancelRequest } = useFriendsStore();
   const setSelectedUser = useChatStore((state) => state.setSelectedUser);
-  const { state, request } = useRelationship(user);
+  const { state, request } = useRelationship(user._id, user.relationship.state);
+  const notAccepting = state === "none" && !user.canRequest;
   const [isBusy, setIsBusy] = useState(false);
 
   const run = async (action: () => Promise<unknown>) => {
@@ -58,8 +48,22 @@ function ResultRow({ user }: { user: UserSearchResult }) {
   };
 
   return (
-    <PersonRow avatar={<Avatar src={user.profilePic} />} name={user.fullName} detail={RELATIONSHIP_DETAIL[state]}>
-      {state === "none" && (
+    <PersonRow
+      avatar={<Avatar src={user.profilePic} />}
+      name={user.fullName}
+      detail={notAccepting ? "Not accepting friend requests" : RELATIONSHIP_DETAIL[state]}
+    >
+      {state !== "friends" && state !== "blocked" && user.canMessage && (
+        <button
+          type="button"
+          className={iconAction}
+          aria-label={`Message ${user.fullName}`}
+          onClick={() => setSelectedUser(user)}
+        >
+          <MessageCircleIcon className="size-5" aria-hidden="true" />
+        </button>
+      )}
+      {state === "none" && user.canRequest && (
         <button
           type="button"
           className={rowPrimaryButton}

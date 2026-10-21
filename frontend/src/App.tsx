@@ -14,6 +14,7 @@ const SignUp = lazy(() => import("@/pages/SignUp"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const ProfileSettings = lazy(() => import("@/pages/settings/ProfileSettings"));
 const AccountSettings = lazy(() => import("@/pages/settings/AccountSettings"));
+const PrivacySettings = lazy(() => import("@/pages/settings/PrivacySettings"));
 const NotificationsSettings = lazy(() => import("@/pages/settings/NotificationsSettings"));
 const PreferencesSettings = lazy(() => import("@/pages/settings/PreferencesSettings"));
 const AboutSettings = lazy(() => import("@/pages/settings/AboutSettings"));
@@ -75,6 +76,7 @@ function App() {
               <Route index element={<ProfileSettings />} />
               <Route path="profile" element={<ProfileSettings />} />
               <Route path="account" element={<AccountSettings />} />
+              <Route path="privacy" element={<PrivacySettings />} />
               <Route path="notifications" element={<NotificationsSettings />} />
               <Route path="preferences" element={<PreferencesSettings />} />
               <Route path="about" element={<AboutSettings />} />

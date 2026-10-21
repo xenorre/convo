@@ -4,6 +4,9 @@ import { apiService } from "@/services/apiService";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
 import type { Contact } from "@/types/auth";
 import type {
+  BlockedUser,
+  BlockedUsersResponse,
+  BlockResponse,
   Friend,
   FriendRequest,
   FriendRequestsResponse,
@@ -19,6 +22,7 @@ interface FriendsState {
   friends: Friend[];
   incoming: FriendRequest[];
   outgoing: FriendRequest[];
+  blocked: BlockedUser[];
   hasLoaded: boolean;
   isLoading: boolean;
   boundSocket: AppSocket | null;
@@ -29,6 +33,8 @@ interface FriendsState {
   declineRequest: (request: FriendRequest) => Promise<boolean>;
   cancelRequest: (request: FriendRequest) => Promise<boolean>;
   removeFriend: (friend: Contact) => Promise<boolean>;
+  blockUser: (user: Contact) => Promise<boolean>;
+  unblockUser: (user: Contact) => Promise<boolean>;
   bindSocket: (socket: AppSocket) => void;
   reset: () => void;
 }
@@ -75,6 +81,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => {
     friends: [],
     incoming: [],
     outgoing: [],
+    blocked: [],
     hasLoaded: false,
     isLoading: false,
     boundSocket: null,
@@ -84,12 +91,13 @@ export const useFriendsStore = create<FriendsState>((set, get) => {
       const sessionVersion = getAuthSessionVersion();
       set({ isLoading: true });
       try {
-        const [{ friends }, { incoming, outgoing }] = await Promise.all([
+        const [{ friends }, { incoming, outgoing }, { users: blocked }] = await Promise.all([
           apiService.get<FriendsResponse>("/friends"),
           apiService.get<FriendRequestsResponse>("/friends/requests"),
+          apiService.get<BlockedUsersResponse>("/users/blocked"),
         ]);
         if (!isCurrentAuthSession(sessionVersion)) return;
-        set({ friends, incoming, outgoing, hasLoaded: true });
+        set({ friends, incoming, outgoing, blocked, hasLoaded: true });
       } catch (error) {
         if (isCurrentAuthSession(sessionVersion)) handleStoreError(error, "Failed to load friends");
       } finally {
@@ -153,6 +161,35 @@ export const useFriendsStore = create<FriendsState>((set, get) => {
           toast.success(`Removed ${friend.fullName} from friends`);
         },
         "Couldn't remove the friend. Try again later.",
+      ),
+
+    // Blocking also ends a friendship or request with them on the server.
+    blockUser: (user) =>
+      guarded(
+        () => apiService.post<BlockResponse>(`/users/${user._id}/block`, {}),
+        () => {
+          set((state) => ({
+            friends: state.friends.filter(({ _id }) => _id !== user._id),
+            incoming: state.incoming.filter((request) => request.user._id !== user._id),
+            outgoing: state.outgoing.filter((request) => request.user._id !== user._id),
+            blocked: [
+              { ...toContact(user), blockedAt: new Date().toISOString() },
+              ...state.blocked.filter(({ _id }) => _id !== user._id),
+            ],
+          }));
+          toast.success(`Blocked ${user.fullName}`);
+        },
+        "Couldn't block this person. Try again later.",
+      ),
+
+    unblockUser: (user) =>
+      guarded(
+        () => apiService.delete(`/users/${user._id}/block`),
+        () => {
+          set((state) => ({ blocked: state.blocked.filter(({ _id }) => _id !== user._id) }));
+          toast.success(`Unblocked ${user.fullName}`);
+        },
+        "Couldn't unblock this person. Try again later.",
       ),
 
     bindSocket: (socket) => {

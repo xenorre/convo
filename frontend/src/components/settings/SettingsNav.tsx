@@ -4,6 +4,7 @@ import {
   ChevronRightIcon,
   InfoIcon,
   KeyRoundIcon,
+  ShieldIcon,
   SlidersHorizontalIcon,
   UserRoundIcon,
 } from "lucide-react";
@@ -12,6 +13,7 @@ import { Link, NavLink } from "react-router";
 const SETTINGS_SECTIONS = [
   { id: "profile", label: "Profile", description: "Photo and name", icon: UserRoundIcon },
   { id: "account", label: "Account", description: "Password and sign-in", icon: KeyRoundIcon },
+  { id: "privacy", label: "Privacy", description: "Messages, requests, blocking", icon: ShieldIcon },
   { id: "notifications", label: "Notifications", description: "Message alerts", icon: BellIcon },
   { id: "preferences", label: "Preferences", description: "Animations", icon: SlidersHorizontalIcon },
   { id: "about", label: "About", description: "Version and shortcuts", icon: InfoIcon },

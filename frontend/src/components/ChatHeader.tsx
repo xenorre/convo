@@ -2,6 +2,7 @@ import { ArrowLeftIcon, UserRoundIcon, XIcon } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
+import ConversationMenu from "./friends/ConversationMenu";
 
 function ChatHeader() {
   const { selectedUser, setSelectedUser } = useChatStore();
@@ -64,6 +65,7 @@ function ChatHeader() {
         </div>
       </div>
 
+      {selectedUser && <ConversationMenu user={selectedUser} />}
       <button
         type="button"
         aria-label="Close conversation"

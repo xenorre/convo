@@ -139,7 +139,7 @@ describe('Add friend search', () => {
   it('waits for three letters, then searches and offers the right action per person', async () => {
     const user = userEvent.setup();
     vi.mocked(apiService.get).mockResolvedValue({
-      users: [anna, bob, cyd, dan].map((u) => ({ ...u, relationship: { state: 'none' } })),
+      users: [anna, bob, cyd, dan].map((u) => ({ ...u, relationship: { state: 'none' }, canRequest: true, canMessage: false })),
     });
     const input = await openSearch(user);
 
@@ -165,6 +165,27 @@ describe('Add friend search', () => {
     expect(await screen.findByRole('button', { name: 'Cancel friend request to Bob Builder' })).toBeInTheDocument();
   });
 
+  it('respects what each person allows', async () => {
+    const user = userEvent.setup();
+    const eve = person('eve', 'Eve Polastri');
+    const fay = person('fay', 'Fay Wray');
+    vi.mocked(apiService.get).mockResolvedValueOnce({
+      users: [
+        { ...eve, relationship: { state: 'none' }, canRequest: false, canMessage: true },
+        { ...fay, relationship: { state: 'none' }, canRequest: true, canMessage: false },
+      ],
+    });
+    const input = await openSearch(user);
+
+    await user.type(input, 'wra');
+    expect(await screen.findByText('Not accepting friend requests')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Eve Polastri as a friend' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Message Eve Polastri' }));
+    expect(useChatStore.getState().selectedUser).toEqual(eve);
+    expect(screen.queryByRole('button', { name: 'Message Fay Wray' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add Fay Wray as a friend' })).toBeInTheDocument();
+  });
+
   it('explains when nobody matches or the search is rate limited', async () => {
     const user = userEvent.setup();
     vi.mocked(apiService.get).mockResolvedValueOnce({ users: [] });
@@ -184,5 +205,35 @@ describe('Add friend search', () => {
 
     await user.click(screen.getByRole('button', { name: 'Back to friends' }));
     expect(screen.getByRole('searchbox', { name: 'Search friends' })).toBeInTheDocument();
+  });
+});
+
+describe('Blocking', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuthStore.setState({ authUser: { ...anna, _id: 'me', email: 'me@example.com' }, onlineUsers: [] });
+    useChatStore.setState({ ...useChatStore.getInitialState() });
+    useFriendsStore.setState({
+      ...useFriendsStore.getInitialState(),
+      hasLoaded: true,
+      friends: [{ ...bob, since }],
+    });
+  });
+
+  it('asks before blocking a friend, then moves them to the blocked list', async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiService.post).mockResolvedValueOnce({ status: 'blocked', endedFriendRequestId: null });
+    render(<FriendsPanel />);
+
+    await user.click(screen.getByRole('button', { name: 'More actions for Bob Builder' }));
+    await user.click(screen.getByRole('button', { name: 'Block' }));
+    expect(screen.getByText(/You won't be friends anymore/)).toBeInTheDocument();
+    expect(apiService.post).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Block Bob' }));
+    expect(apiService.post).toHaveBeenCalledWith('/users/bob/block', {});
+    expect(useFriendsStore.getState().friends).toEqual([]);
+    expect(useFriendsStore.getState().blocked.map((b) => b._id)).toEqual(['bob']);
+    expect(screen.queryByText('Bob Builder')).toBeNull();
   });
 });

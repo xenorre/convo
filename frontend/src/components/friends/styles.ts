@@ -8,3 +8,6 @@ export const rowSecondaryButton =
 
 export const iconAction =
   "icon-button cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 disabled:cursor-not-allowed disabled:opacity-50";
+
+export const rowDangerButton =
+  "inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10 px-3 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 disabled:cursor-not-allowed disabled:opacity-50";
