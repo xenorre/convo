@@ -6,6 +6,7 @@ import socketAuthMiddleware from "#src/middleware/socket.auth.middleware.js";
 import logger from "#config/logger.js";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
+import { visibleOnlineUsers } from "#services/privacy.service.js";
 import {
   createSocketRegistry,
   joinActiveSession,
@@ -84,6 +85,15 @@ export const initializeSocketInfrastructure = () => {
 const ONLINE_USERS_SET = "online_users";
 const USER_SOCKETS_PREFIX = "user_sockets:"; // user_sockets:<userId> is a set
 
+// Sends everyone the online list, leaving out people who hide their status.
+// Also called when someone changes that setting.
+export const broadcastOnlineUsers = async () => {
+  const users = presenceClient
+    ? await presenceClient.sMembers(ONLINE_USERS_SET)
+    : userSockets.onlineUsers();
+  io.emit("getOnlineUsers", await visibleOnlineUsers(users));
+};
+
 io.on("connection", async (socket) => {
   const userId = socket.userId;
   let registered = false;
@@ -110,11 +120,8 @@ io.on("connection", async (socket) => {
             arguments: [socket.id, userId],
           }
         );
-        const users = await presenceClient.sMembers(ONLINE_USERS_SET);
-        io.emit("getOnlineUsers", users);
-      } else {
-        io.emit("getOnlineUsers", userSockets.onlineUsers());
       }
+      await broadcastOnlineUsers();
     } catch (e) {
       logger.error("Presence update (disconnect) failed", { error: e.message });
     }
@@ -133,11 +140,8 @@ io.on("connection", async (socket) => {
             .sAdd(`${USER_SOCKETS_PREFIX}${userId}`, socket.id)
             .sAdd(ONLINE_USERS_SET, userId)
             .exec();
-          const users = await presenceClient.sMembers(ONLINE_USERS_SET);
-          io.emit("getOnlineUsers", users);
-        } else {
-          io.emit("getOnlineUsers", userSockets.onlineUsers());
         }
+        await broadcastOnlineUsers();
       } catch (e) {
         logger.error("Presence update (connect) failed", { error: e.message });
       }

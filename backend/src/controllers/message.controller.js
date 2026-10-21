@@ -1,4 +1,6 @@
 import Message from "#src/models/message.model.js";
+import User from "#src/models/user.model.js";
+import { messagePermission } from "#src/services/privacy.service.js";
 import { uploadMessageFile } from "#src/services/storage.service.js";
 import { getChatSummaries } from "#src/services/chat.service.js";
 import logger from "#src/config/logger.js";
@@ -44,6 +46,21 @@ export const sendMessage = async (req, res) => {
     const { text } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
+
+    // Checked before any upload, so a refused message leaves no stored file.
+    const receiver = await User.findById(receiverId).select("privacy").lean();
+    if (!receiver) {
+      return res.status(404).json({ error: "User not found", requestId: req.requestId });
+    }
+    const permission = await messagePermission(senderId, receiver);
+    if (!permission.allowed) {
+      // Their messaging setting is explained; a block only gets a generic refusal.
+      return res.status(403).json(
+        permission.reason === "FRIENDS_ONLY"
+          ? { error: "Only their friends can start a conversation with them", code: "MESSAGE_FRIENDS_ONLY", requestId: req.requestId }
+          : { error: "You can't message this person", code: "MESSAGE_NOT_ALLOWED", requestId: req.requestId }
+      );
+    }
 
     let fileUrl;
     if (req.file) {

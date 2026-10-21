@@ -2,6 +2,12 @@ import Friendship, { friendPairKey } from "#src/models/friendship.model.js";
 import User from "#src/models/user.model.js";
 import Message from "#src/models/message.model.js";
 import logger from "#config/logger.js";
+import {
+  blockedPeerIds,
+  conversationPartnerIds,
+  isBlockedBetween,
+  privacyOf,
+} from "#services/privacy.service.js";
 
 const PUBLIC_USER_FIELDS = "fullName profilePic";
 export const SEARCH_LIMIT = 20;
@@ -13,6 +19,9 @@ export const FRIEND_ERRORS = Object.freeze({
   ALREADY_REQUESTED: "FRIEND_ALREADY_REQUESTED",
   REQUEST_NOT_FOUND: "FRIEND_REQUEST_NOT_FOUND",
   NOT_FRIENDS: "FRIEND_NOT_FRIENDS",
+  // A block (either way) or "nobody" in their privacy settings; deliberately
+  // one error so a block cannot be told apart from the setting.
+  NOT_ACCEPTING: "FRIEND_NOT_ACCEPTING",
 });
 
 const publicUser = (user) => ({
@@ -28,7 +37,7 @@ const otherSide = (friendship, userId) =>
   isSameUser(friendship.requester, userId) ? friendship.recipient : friendship.requester;
 
 const loadPublicUser = (userId) =>
-  User.findById(userId).select(PUBLIC_USER_FIELDS).lean();
+  User.findById(userId).select(`${PUBLIC_USER_FIELDS} privacy`).lean();
 
 export const listFriends = async (userId) => {
   const friendships = await Friendship.find({
@@ -97,6 +106,13 @@ export const sendRequest = async (userId, targetId) => {
     const friendship = await accept(existing._id);
     if (!friendship) throw new Error(FRIEND_ERRORS.ALREADY_REQUESTED);
     return { status: "accepted", friendship, target: publicUser(target) };
+  }
+
+  if (
+    privacyOf(target).allowFriendRequestsFrom === "nobody" ||
+    (await isBlockedBetween(userId, targetId))
+  ) {
+    throw new Error(FRIEND_ERRORS.NOT_ACCEPTING);
   }
 
   try {
@@ -230,22 +246,37 @@ export const migrateChatPartnersToFriends = async ({ batchSize = 1000 } = {}) =>
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Case-insensitive match anywhere in the name. Emails are never returned
-// or searched, so the results reveal names only.
+// or searched, so the results reveal names only. People on either side of a
+// block never see each other here.
 export const searchUsers = async (userId, query) => {
   const users = await User.find({
-    _id: { $ne: userId },
+    _id: { $nin: [userId, ...(await blockedPeerIds(userId))] },
     fullName: { $regex: escapeRegex(query), $options: "i" },
   })
-    .select(PUBLIC_USER_FIELDS)
+    .select(`${PUBLIC_USER_FIELDS} privacy`)
     .sort({ fullName: 1 })
     .limit(SEARCH_LIMIT)
     .lean();
 
-  const relationships = await getRelationships(userId, users.map((user) => user._id));
+  const ids = users.map((user) => user._id);
+  const [relationships, partners] = await Promise.all([
+    getRelationships(userId, ids),
+    conversationPartnerIds(userId, ids),
+  ]);
   logger.debug("User search", { userId, results: users.length });
 
-  return users.map((user) => ({
-    ...publicUser(user),
-    relationship: relationships.get(String(user._id)),
-  }));
+  return users.map((user) => {
+    const relationship = relationships.get(String(user._id));
+    const privacy = privacyOf(user);
+    return {
+      ...publicUser(user),
+      relationship,
+      // What the UI may offer; the server checks again when it happens.
+      canRequest: relationship.state === "none" && privacy.allowFriendRequestsFrom !== "nobody",
+      canMessage:
+        relationship.state === "friends" ||
+        privacy.allowMessagesFrom === "everyone" ||
+        partners.has(String(user._id)),
+    };
+  });
 };

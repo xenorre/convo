@@ -12,6 +12,8 @@ process.env.LOG_TO_FILES = "false";
 
 const { default: User } = await import("../src/models/user.model.js");
 const { default: Friendship, friendPairKey } = await import("../src/models/friendship.model.js");
+const { default: Block } = await import("../src/models/block.model.js");
+const { default: Message } = await import("../src/models/message.model.js");
 const { default: logger } = await import("../src/config/logger.js");
 const friends = await import("../src/controllers/friend.controller.js");
 const { rateLimitPerUser } = await import("../src/middleware/rateLimit.middleware.js");
@@ -19,6 +21,13 @@ const { io } = await import("../src/config/socket.js");
 
 logger.silent = true;
 afterEach(() => mock.restoreAll());
+
+// No blocks and no shared conversations unless a test says otherwise.
+const noBlocksOrHistory = ({ blocked = false } = {}) => {
+  mock.method(Block, "exists", async () => (blocked ? { _id: "block" } : null));
+  mock.method(Block, "find", () => query([]));
+  mock.method(Message, "distinct", async () => []);
+};
 after(() => io.close());
 
 const ada = { _id: "507f1f77bcf86cd799439011", fullName: "Ada", profilePic: "/ada.png" };
@@ -58,6 +67,7 @@ const call = async (handler, { body = {}, params = {}, query: q = {}, user = ada
 };
 
 test("sending a request stores it and tells the recipient who asked", async () => {
+  noBlocksOrHistory();
   mock.method(User, "findById", () => query(bob));
   mock.method(Friendship, "findOne", () => query(null));
   const create = mock.method(Friendship, "create", async (doc) => ({ _id: requestDocId, createdAt: "now", ...doc }));
@@ -116,6 +126,7 @@ test("request errors map to clear status codes", async () => {
 
   for (const [body, arrange, status, code] of cases) {
     mock.restoreAll();
+    noBlocksOrHistory();
     arrange();
     captureSocket();
     const res = await call(friends.createFriendRequest, { body });
@@ -202,6 +213,7 @@ test("the friends list and requests never include emails", async () => {
 });
 
 test("user search escapes the query and reports each relationship", async () => {
+  noBlocksOrHistory();
   const find = mock.method(User, "find", () => query([{ ...bob }]));
   mock.method(Friendship, "find", () => query([
     { _id: requestDocId, pairKey: friendPairKey(ada._id, bob._id), status: "pending", requester: ada._id },
@@ -211,10 +223,15 @@ test("user search escapes the query and reports each relationship", async () => 
 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(find.mock.calls[0].arguments[0], {
-    _id: { $ne: ada._id },
+    _id: { $nin: [ada._id] },
     fullName: { $regex: "b\\(o\\)b", $options: "i" },
   });
-  assert.deepEqual(res.body.users, [{ ...bob, relationship: { state: "outgoing", friendRequestId: requestDocId } }]);
+  assert.deepEqual(res.body.users, [{
+    ...bob,
+    relationship: { state: "outgoing", friendRequestId: requestDocId },
+    canRequest: false,
+    canMessage: false,
+  }]);
 
   for (const q of [undefined, "ab", "  a  ", "x".repeat(51)]) {
     assert.equal((await call(friends.searchForUsers, { query: { q } })).statusCode, 400, String(q));
@@ -242,4 +259,46 @@ test("the per-user rate limit blocks a burst and resets after the window", async
 
   t.mock.timers.tick(1000);
   assert.ok(run("a").passed);
+});
+
+test("people who blocked or were blocked, or accept no requests, cannot be invited", async () => {
+  for (const [arrange, why] of [
+    [() => { noBlocksOrHistory({ blocked: true }); mock.method(User, "findById", () => query(bob)); }, "block"],
+    [() => {
+      noBlocksOrHistory();
+      mock.method(User, "findById", () => query({ ...bob, privacy: { allowFriendRequestsFrom: "nobody" } }));
+    }, "nobody"],
+  ]) {
+    mock.restoreAll();
+    arrange();
+    mock.method(Friendship, "findOne", () => query(null));
+    const create = mock.method(Friendship, "create", async () => assert.fail("must not create"));
+    captureSocket();
+
+    const res = await call(friends.createFriendRequest, { body: { userId: bob._id } });
+
+    assert.equal(res.statusCode, 403, why);
+    // The same answer either way, so a block cannot be detected.
+    assert.deepEqual(res.body.error, "This person isn't accepting friend requests");
+    assert.equal(create.mock.callCount(), 0);
+  }
+});
+
+test("search hides blocked people and tells the UI what it may offer", async () => {
+  mock.method(Block, "find", () => query([{ blocker: ada._id, blocked: "blocked-by-me" }, { blocker: "blocked-me", blocked: ada._id }]));
+  mock.method(Message, "distinct", async (field) => (field === "receiverId" ? ["507f1f77bcf86cd799439013"] : []));
+  const cyd = { _id: "507f1f77bcf86cd799439013", fullName: "Cyd", profilePic: "" };
+  const dee = { _id: "507f1f77bcf86cd799439014", fullName: "Dee", profilePic: "", privacy: { allowMessagesFrom: "everyone", allowFriendRequestsFrom: "nobody" } };
+  const find = mock.method(User, "find", () => query([{ ...bob }, { ...cyd }, { ...dee }]));
+  mock.method(Friendship, "find", () => query([]));
+
+  const res = await call(friends.searchForUsers, { query: { q: "abc" } });
+
+  assert.deepEqual(find.mock.calls[0].arguments[0]._id, { $nin: [ada._id, "blocked-by-me", "blocked-me"] });
+  assert.deepEqual(res.body.users.map(({ fullName, canRequest, canMessage }) => [fullName, canRequest, canMessage]), [
+    ["Bob", true, false],
+    ["Cyd", true, true], // they already have a conversation
+    ["Dee", false, true], // accepts messages from everyone, requests from nobody
+  ]);
+  assert.ok(res.body.users.every((user) => !("privacy" in user)));
 });

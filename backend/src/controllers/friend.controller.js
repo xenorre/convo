@@ -24,6 +24,7 @@ const ERROR_RESPONSES = {
   [FRIEND_ERRORS.ALREADY_REQUESTED]: [409, "A friend request is already pending"],
   [FRIEND_ERRORS.REQUEST_NOT_FOUND]: [404, "Friend request not found"],
   [FRIEND_ERRORS.NOT_FRIENDS]: [404, "You're not friends"],
+  [FRIEND_ERRORS.NOT_ACCEPTING]: [403, "This person isn't accepting friend requests"],
 };
 
 const me = (req) => ({

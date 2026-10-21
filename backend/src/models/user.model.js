@@ -25,6 +25,13 @@ const users = new mongoose.Schema(
       default:
         "https://upload.wikimedia.org/wikipedia/commons/7/7c/Profile_avatar_placeholder_large.png",
     },
+    // Read through privacyOf() in privacy.service.js: accounts created before
+    // these settings existed (and .lean() reads) have no values stored.
+    privacy: {
+      allowMessagesFrom: { type: String, enum: ["everyone", "friends"], default: "friends" },
+      allowFriendRequestsFrom: { type: String, enum: ["everyone", "nobody"], default: "everyone" },
+      showOnlineStatus: { type: Boolean, default: true },
+    },
   },
   {
     timestamps: true,
