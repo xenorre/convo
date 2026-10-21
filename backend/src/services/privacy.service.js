@@ -1,6 +1,5 @@
 import Block from "#src/models/block.model.js";
 import Friendship, { friendPairKey } from "#src/models/friendship.model.js";
-import Message from "#src/models/message.model.js";
 import User from "#src/models/user.model.js";
 
 const PUBLIC_USER_FIELDS = "fullName profilePic";
@@ -101,33 +100,14 @@ export const unblockUser = async (userId, targetId) => {
 const areFriends = async (a, b) =>
   Boolean(await Friendship.exists({ pairKey: friendPairKey(a, b), status: "accepted" }));
 
-const haveConversation = async (a, b) =>
-  Boolean(
-    await Message.exists({
-      $or: [
-        { senderId: a, receiverId: b },
-        { senderId: b, receiverId: a },
-      ],
-    })
-  );
-
 // Whether `senderId` may send a message to `receiver` (a user document with
-// its privacy settings). People who already talked can keep talking.
+// its privacy settings). "Friends only" means current friends: a shared
+// history does not count, so removing someone from friends stops new messages.
 export const messagePermission = async (senderId, receiver) => {
   if (await isBlockedBetween(senderId, receiver._id)) return { allowed: false, reason: "BLOCKED" };
   if (privacyOf(receiver).allowMessagesFrom === "everyone") return { allowed: true };
   if (await areFriends(senderId, receiver._id)) return { allowed: true };
-  if (await haveConversation(senderId, receiver._id)) return { allowed: true };
   return { allowed: false, reason: "FRIENDS_ONLY" };
-};
-
-// IDs among `userIds` that `userId` has exchanged at least one message with.
-export const conversationPartnerIds = async (userId, userIds) => {
-  const [sentTo, receivedFrom] = await Promise.all([
-    Message.distinct("receiverId", { senderId: userId, receiverId: { $in: userIds } }),
-    Message.distinct("senderId", { receiverId: userId, senderId: { $in: userIds } }),
-  ]);
-  return new Set([...sentTo, ...receivedFrom].map(String));
 };
 
 // The online list everyone receives, minus people who hide their status.

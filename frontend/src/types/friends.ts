@@ -33,6 +33,12 @@ export interface BlockResponse {
   endedFriendRequestId: string | null;
 }
 
+// Whether a conversation can be written in. A block on their side reads as
+// "UNAVAILABLE", just like other reasons the server does not explain.
+export type MessagingResponse =
+  | { canMessage: true }
+  | { canMessage: false; reason: "FRIENDS_ONLY" | "UNAVAILABLE" };
+
 export interface PrivacySettings {
   allowMessagesFrom: "everyone" | "friends";
   allowFriendRequestsFrom: "everyone" | "nobody";

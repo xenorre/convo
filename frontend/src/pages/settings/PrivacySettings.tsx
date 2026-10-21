@@ -94,7 +94,7 @@ function PrivacySettings() {
         <>
           <SettingsCard
             title="Who can message me"
-            description="People you already have a conversation with can always keep writing to you."
+            description="Friends only means people on your friends list right now; removing someone stops their new messages."
           >
             <ChoiceGroup
               legend="Who can message me"

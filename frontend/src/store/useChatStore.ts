@@ -82,6 +82,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   chatSearchQuery: "",
   selectedUser: null,
   isConversationVisible: false,
+  messagingRevision: 0,
   isUsersLoading: false,
   isMessagesLoading: false,
   socketBound: false,
@@ -246,6 +247,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (!isCurrentAuthSession(sessionVersion)) return;
       const apiError = createApiError(e);
       handleStoreError(e, apiError.status === 403 ? apiError.message : "Failed to send message");
+      if (apiError.status === 403) set((state) => ({ messagingRevision: state.messagingRevision + 1 }));
 
       // Remove optimistic message on error
       set((state) => ({

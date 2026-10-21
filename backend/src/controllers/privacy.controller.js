@@ -1,9 +1,11 @@
 import logger from "#config/logger.js";
 import { broadcastOnlineUsers, io } from "#config/socket.js";
+import User from "#src/models/user.model.js";
 import {
   blockUser,
   getPrivacySettings,
   listBlocked,
+  messagePermission,
   PRIVACY_ERRORS,
   unblockUser,
   updatePrivacySettings,
@@ -58,6 +60,24 @@ export const updateSettings = handle(async (req, res) => {
     );
   }
   res.status(200).json({ privacy, requestId: req.requestId });
+});
+
+// Lets a conversation show why it can't be written in. A block on their
+// side reads as "UNAVAILABLE" so it cannot be told apart from other reasons.
+export const getMessaging = handle(async (req, res) => {
+  const receiver = await User.findById(req.params.id).select("privacy").lean();
+  if (!receiver) throw new Error(PRIVACY_ERRORS.USER_NOT_FOUND);
+
+  const permission = await messagePermission(req.user._id, receiver);
+  res.status(200).json(
+    permission.allowed
+      ? { canMessage: true, requestId: req.requestId }
+      : {
+          canMessage: false,
+          reason: permission.reason === "FRIENDS_ONLY" ? "FRIENDS_ONLY" : "UNAVAILABLE",
+          requestId: req.requestId,
+        }
+  );
 });
 
 export const getBlocked = handle(async (req, res) => {

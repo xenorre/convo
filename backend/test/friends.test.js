@@ -286,7 +286,6 @@ test("people who blocked or were blocked, or accept no requests, cannot be invit
 
 test("search hides blocked people and tells the UI what it may offer", async () => {
   mock.method(Block, "find", () => query([{ blocker: ada._id, blocked: "blocked-by-me" }, { blocker: "blocked-me", blocked: ada._id }]));
-  mock.method(Message, "distinct", async (field) => (field === "receiverId" ? ["507f1f77bcf86cd799439013"] : []));
   const cyd = { _id: "507f1f77bcf86cd799439013", fullName: "Cyd", profilePic: "" };
   const dee = { _id: "507f1f77bcf86cd799439014", fullName: "Dee", profilePic: "", privacy: { allowMessagesFrom: "everyone", allowFriendRequestsFrom: "nobody" } };
   const find = mock.method(User, "find", () => query([{ ...bob }, { ...cyd }, { ...dee }]));
@@ -297,7 +296,7 @@ test("search hides blocked people and tells the UI what it may offer", async () 
   assert.deepEqual(find.mock.calls[0].arguments[0]._id, { $nin: [ada._id, "blocked-by-me", "blocked-me"] });
   assert.deepEqual(res.body.users.map(({ fullName, canRequest, canMessage }) => [fullName, canRequest, canMessage]), [
     ["Bob", true, false],
-    ["Cyd", true, true], // they already have a conversation
+    ["Cyd", true, false], // friends only, and not friends
     ["Dee", false, true], // accepts messages from everyone, requests from nobody
   ]);
   assert.ok(res.body.users.every((user) => !("privacy" in user)));

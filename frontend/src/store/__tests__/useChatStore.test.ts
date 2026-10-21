@@ -348,13 +348,16 @@ describe('chat list order and last message', () => {
     const toastError = vi.spyOn(toast, 'error');
     useChatStore.setState({ selectedUser: sender });
     vi.mocked(apiService.post).mockRejectedValueOnce({
-      status: 403, message: 'Only their friends can start a conversation with them', code: 'MESSAGE_FRIENDS_ONLY',
+      status: 403, message: 'Only their friends can message them', code: 'MESSAGE_FRIENDS_ONLY',
     });
+    const revision = useChatStore.getState().messagingRevision;
 
     await useChatStore.getState().sendMessage({ text: 'hello' });
 
-    expect(toastError).toHaveBeenCalledWith('Only their friends can start a conversation with them');
+    expect(toastError).toHaveBeenCalledWith('Only their friends can message them');
     expect(useChatStore.getState().messages).toEqual([]);
+    // The conversation re-checks whether it can still be written in.
+    expect(useChatStore.getState().messagingRevision).toBe(revision + 1);
   });
 
   it('does not touch the chat list when sending fails', async () => {

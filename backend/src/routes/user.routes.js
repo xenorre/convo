@@ -14,6 +14,7 @@ import { searchForUsers } from "#controllers/friend.controller.js";
 import {
   block,
   getBlocked,
+  getMessaging,
   getSettings,
   unblock,
   updateSettings,
@@ -34,6 +35,7 @@ router.get("/search", rateLimitPerUser({ windowMs: 60 * 1000, max: 30 }), search
 router.get("/settings", getSettings);
 router.patch("/settings", updateSettings);
 router.get("/blocked", getBlocked);
+router.get("/:id/messaging", validateObjectIdParam("id"), getMessaging);
 router.post("/:id/block", validateObjectIdParam("id"), block);
 router.delete("/:id/block", validateObjectIdParam("id"), unblock);
 

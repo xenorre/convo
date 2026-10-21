@@ -57,7 +57,7 @@ export const sendMessage = async (req, res) => {
       // Their messaging setting is explained; a block only gets a generic refusal.
       return res.status(403).json(
         permission.reason === "FRIENDS_ONLY"
-          ? { error: "Only their friends can start a conversation with them", code: "MESSAGE_FRIENDS_ONLY", requestId: req.requestId }
+          ? { error: "Only their friends can message them", code: "MESSAGE_FRIENDS_ONLY", requestId: req.requestId }
           : { error: "You can't message this person", code: "MESSAGE_NOT_ALLOWED", requestId: req.requestId }
       );
     }

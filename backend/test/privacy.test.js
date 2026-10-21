@@ -118,18 +118,16 @@ test("block errors map to clear status codes", async () => {
   assert.equal((await call(privacy.unblock, { params: { id: bob._id } })).statusCode, 404);
 });
 
-test("message permission: blocks, then the receiver's setting, then friends or history", async () => {
-  const state = { blocked: false, friends: false, history: false };
+test("message permission: blocks, then the receiver's setting, then current friends", async () => {
+  const state = { blocked: false, friends: false };
   mock.method(Block, "exists", async () => (state.blocked ? {} : null));
   mock.method(Friendship, "exists", async () => (state.friends ? {} : null));
-  mock.method(Message, "exists", async () => (state.history ? {} : null));
+  const history = mock.method(Message, "exists", async () => ({}));
   const check = (receiverPrivacy) => messagePermission(ada._id, { _id: bob._id, privacy: receiverPrivacy });
 
   assert.deepEqual(await check(undefined), { allowed: false, reason: "FRIENDS_ONLY" });
+  assert.equal(history.mock.callCount(), 0, "a shared history does not count as permission");
   assert.deepEqual(await check({ allowMessagesFrom: "everyone" }), { allowed: true });
-  state.history = true;
-  assert.deepEqual(await check(undefined), { allowed: true }, "existing conversations continue");
-  state.history = false;
   state.friends = true;
   assert.deepEqual(await check(undefined), { allowed: true });
   state.blocked = true;
@@ -162,4 +160,21 @@ test("people who hide their status are left out of the online list", async () =>
 
   assert.deepEqual(await visibleOnlineUsers([ada._id, bob._id]), [ada._id]);
   assert.deepEqual(await visibleOnlineUsers([]), []);
+});
+
+test("a conversation can ask whether it may be written in, without revealing a block", async () => {
+  const state = { blocked: false, friends: false };
+  mock.method(User, "findById", () => query({ _id: bob._id }));
+  mock.method(Block, "exists", async () => (state.blocked ? {} : null));
+  mock.method(Friendship, "exists", async () => (state.friends ? {} : null));
+  const ask = async () => (await call(privacy.getMessaging, { params: { id: bob._id } })).body;
+
+  assert.deepEqual(await ask(), { canMessage: false, reason: "FRIENDS_ONLY", requestId: "req" });
+  state.friends = true;
+  assert.deepEqual(await ask(), { canMessage: true, requestId: "req" });
+  state.blocked = true;
+  assert.deepEqual(await ask(), { canMessage: false, reason: "UNAVAILABLE", requestId: "req" });
+
+  mock.method(User, "findById", () => query(null));
+  assert.equal((await call(privacy.getMessaging, { params: { id: bob._id } })).statusCode, 404);
 });

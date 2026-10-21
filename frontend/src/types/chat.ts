@@ -20,6 +20,9 @@ export interface ChatStore {
   selectedUser: Contact | null;
   // Whether the conversation panel is on screen (not e.g. hidden behind Settings).
   isConversationVisible: boolean;
+  // Bumped when the server refuses a message, so the conversation re-checks
+  // whether it can still be written in.
+  messagingRevision: number;
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
   socketBound: boolean;

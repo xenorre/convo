@@ -2,12 +2,7 @@ import Friendship, { friendPairKey } from "#src/models/friendship.model.js";
 import User from "#src/models/user.model.js";
 import Message from "#src/models/message.model.js";
 import logger from "#config/logger.js";
-import {
-  blockedPeerIds,
-  conversationPartnerIds,
-  isBlockedBetween,
-  privacyOf,
-} from "#services/privacy.service.js";
+import { blockedPeerIds, isBlockedBetween, privacyOf } from "#services/privacy.service.js";
 
 const PUBLIC_USER_FIELDS = "fullName profilePic";
 export const SEARCH_LIMIT = 20;
@@ -258,11 +253,7 @@ export const searchUsers = async (userId, query) => {
     .limit(SEARCH_LIMIT)
     .lean();
 
-  const ids = users.map((user) => user._id);
-  const [relationships, partners] = await Promise.all([
-    getRelationships(userId, ids),
-    conversationPartnerIds(userId, ids),
-  ]);
+  const relationships = await getRelationships(userId, users.map((user) => user._id));
   logger.debug("User search", { userId, results: users.length });
 
   return users.map((user) => {
@@ -273,10 +264,7 @@ export const searchUsers = async (userId, query) => {
       relationship,
       // What the UI may offer; the server checks again when it happens.
       canRequest: relationship.state === "none" && privacy.allowFriendRequestsFrom !== "nobody",
-      canMessage:
-        relationship.state === "friends" ||
-        privacy.allowMessagesFrom === "everyone" ||
-        partners.has(String(user._id)),
+      canMessage: relationship.state === "friends" || privacy.allowMessagesFrom === "everyone",
     };
   });
 };

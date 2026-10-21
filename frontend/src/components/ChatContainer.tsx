@@ -10,6 +10,8 @@ import { formatMessageTime } from "@/utils/chatTimestamp";
 import { onWindowReturn } from "@/utils/windowAttention";
 import { useFriendsStore } from "@/store/useFriendsStore";
 import BlockedConversationNotice from "./friends/BlockedConversationNotice";
+import MessagingUnavailableNotice from "./friends/MessagingUnavailableNotice";
+import { useMessagingPermission } from "@/hooks/useMessagingPermission";
 
 function ChatContainer() {
   const {
@@ -27,6 +29,7 @@ function ChatContainer() {
   const isBlocked = useFriendsStore((state) =>
     state.blocked.some(({ _id }) => _id === selectedUser?._id),
   );
+  const permission = useMessagingPermission(selectedUser?._id);
   const messagesRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -132,7 +135,13 @@ function ChatContainer() {
           />
         )}
       </div>
-      {isBlocked && selectedUser ? <BlockedConversationNotice user={selectedUser} /> : <MessageInput />}
+      {selectedUser && isBlocked ? (
+        <BlockedConversationNotice user={selectedUser} />
+      ) : selectedUser && permission?.canMessage === false ? (
+        <MessagingUnavailableNotice user={selectedUser} reason={permission.reason} />
+      ) : (
+        <MessageInput />
+      )}
     </>
   );
 }
