@@ -135,7 +135,8 @@ describe('incoming message notifications', () => {
   });
 
   it('appends messages to an already open conversation without creating a notification', async () => {
-    useChatStore.setState({ selectedUser: sender, chats: [sender] });
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    useChatStore.setState({ selectedUser: sender, chats: [sender], isConversationVisible: true });
     const receiveMessage = bindIncomingMessages();
 
     receiveMessage({ message, sender });
@@ -230,7 +231,8 @@ describe('incoming message notifications', () => {
   it('refreshes the chat history and unread counts after reconnecting', async () => {
     const socket = useAuthStore.getState().socket!;
     Object.assign(socket, { connected: true });
-    useChatStore.setState({ selectedUser: sender, chats: [sender] });
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    useChatStore.setState({ selectedUser: sender, chats: [sender], isConversationVisible: true });
     vi.mocked(apiService.get).mockImplementation(async url =>
       url === '/messages/chats' ? { chats: [sender], unreadCounts: {} } : { messages: [message] }
     );
@@ -345,5 +347,58 @@ describe('chat list order and last message', () => {
     useChatStore.getState().setSelectedUser(summary(sender, '2026-10-19T10:00:00.000Z'));
 
     expect(useChatStore.getState().selectedUser).toEqual(sender);
+  });
+});
+
+describe('reading the open conversation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.mocked(apiService.get).mockResolvedValue({ chats: [], unreadCounts: {} });
+    vi.mocked(apiService.post).mockResolvedValue({});
+    useChatStore.setState({
+      ...useChatStore.getInitialState(),
+      selectedUser: sender,
+      chats: [sender],
+      isConversationVisible: true,
+    }, true);
+    useAuthStore.setState({
+      ...useAuthStore.getInitialState(),
+      authUser: { _id: 'my-id', fullName: 'Current User', email: 'current@example.com', profilePic: '' },
+      socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
+    }, true);
+  });
+
+  it.each([
+    ['the window has no focus', () => vi.spyOn(document, 'hasFocus').mockReturnValue(false)],
+    ['the tab is hidden', () => {
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    }],
+    ['Settings covers the conversation', () => {
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      useChatStore.setState({ isConversationVisible: false });
+    }],
+  ])('counts and announces a message in the open chat when %s', async (_, arrange) => {
+    arrange();
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message, sender });
+    await Promise.resolve();
+
+    expect(useChatStore.getState().messages).toEqual([message]);
+    expect(apiService.post).not.toHaveBeenCalled();
+    expect(useChatStore.getState().unreadCounts[sender._id]).toBe(1);
+    expect(getNotification()).toMatchObject({ messageId: message._id, senderName: sender.fullName });
+  });
+
+  it('marks read only when the user is looking at that conversation', () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const { isReadingConversation } = useChatStore.getState();
+
+    expect(isReadingConversation(sender._id)).toBe(true);
+    expect(isReadingConversation('someone-else')).toBe(false);
+    hasFocus.mockReturnValue(false);
+    expect(isReadingConversation(sender._id)).toBe(false);
   });
 });

@@ -17,6 +17,8 @@ export interface ChatStore {
   activeTab: "chats" | "contacts";
   chatSearchQuery: string;
   selectedUser: Contact | null;
+  // Whether the conversation panel is on screen (not e.g. hidden behind Settings).
+  isConversationVisible: boolean;
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
   socketBound: boolean;
@@ -26,6 +28,8 @@ export interface ChatStore {
   setActiveTab: (tab: "chats" | "contacts") => void;
   setChatSearchQuery: (query: string) => void;
   setSelectedUser: (user: Contact | null) => void;
+  setConversationVisible: (visible: boolean) => void;
+  isReadingConversation: (userId: string) => boolean;
   getAllContacts: () => Promise<void>;
   getMyChatPartners: () => Promise<void>;
   getMessagesByUserId: (userId: string) => Promise<void>;

@@ -7,6 +7,7 @@ import type { Message } from "@/types/message";
 import type { Contact } from "@/types/auth";
 import { handleStoreError } from "@/utils/errorHandling";
 import { notifyIncomingMessage } from "@/utils/messageNotifications";
+import { isWindowInView } from "@/utils/windowAttention";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
 import type { ChatLastMessage, ContactsResponse, ChatsResponse, MessagesResponse } from "@/types/api";
 
@@ -79,6 +80,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   activeTab: "chats",
   chatSearchQuery: "",
   selectedUser: null,
+  isConversationVisible: false,
   isUsersLoading: false,
   isMessagesLoading: false,
   socketBound: false,
@@ -92,6 +94,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setChatSearchQuery: (chatSearchQuery) => set({ chatSearchQuery }),
+  setConversationVisible: (isConversationVisible) => set({ isConversationVisible }),
+
+  // The open conversation counts as read only while someone can see it.
+  isReadingConversation: (userId) => {
+    const { selectedUser, isConversationVisible } = get();
+    return isConversationVisible && String(selectedUser?._id) === userId && isWindowInView();
+  },
+
   setSelectedUser: (selectedUser) => {
     set({ selectedUser: selectedUser && toContact(selectedUser) });
   },
@@ -310,9 +320,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         set({ messages: [...currentMessages, actualMessage] });
       }
 
-      // Update unread counts or mark read
-      if (isForOpenChat) {
-        get().markRead(String(selectedUser._id));
+      // Mark read only if the user is looking at this conversation right now;
+      // otherwise count it and alert, even when the chat is open behind another window.
+      if (get().isReadingConversation(senderId)) {
+        get().markRead(senderId);
       } else {
         set((s) => ({
           unreadCounts: {
@@ -350,7 +361,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const userId = get().selectedUser?._id;
         if (userId) {
           void get().getMessagesByUserId(userId).then(() => {
-            if (isActiveSocket() && get().selectedUser?._id === userId) {
+            if (isActiveSocket() && get().isReadingConversation(userId)) {
               void get().markRead(userId);
             }
           });

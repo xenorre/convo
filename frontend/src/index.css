@@ -103,7 +103,8 @@
 }
 
 @layer utilities {
-  @media (prefers-reduced-motion: reduce) {
+  /* Set from the device setting, which defaults to the system preference */
+  :root[data-reduced-motion="true"] {
     /* Disable all Tailwind animations for users who prefer reduced motion */
     .animate-spin,
     .animate-pulse,
@@ -319,7 +320,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:root[data-reduced-motion="true"] {
   .app-toast,
   .app-toast[data-visible="false"] {
     animation: none;

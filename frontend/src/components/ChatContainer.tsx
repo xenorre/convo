@@ -7,6 +7,7 @@ import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { formatMessageTime } from "@/utils/chatTimestamp";
+import { onWindowReturn } from "@/utils/windowAttention";
 
 function ChatContainer() {
   const {
@@ -17,6 +18,8 @@ function ChatContainer() {
     isMessagesLoading,
     subscribeToMessages,
     unsubscribeFromMessage,
+    setConversationVisible,
+    isReadingConversation,
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -24,9 +27,10 @@ function ChatContainer() {
 
   useEffect(() => {
     if (selectedUser && authUser && selectedUser._id) {
-      getMessagesByUserId(selectedUser._id.toString()).then(() => {
-        // Mark read after messages are loaded
-        markRead(selectedUser._id.toString());
+      const userId = selectedUser._id.toString();
+      getMessagesByUserId(userId).then(() => {
+        // Mark read after messages are loaded, unless the window is in the background
+        if (isReadingConversation(userId)) markRead(userId);
       });
       subscribeToMessages();
     }
@@ -39,9 +43,27 @@ function ChatContainer() {
     authUser,
     getMessagesByUserId,
     markRead,
+    isReadingConversation,
     subscribeToMessages,
     unsubscribeFromMessage,
   ]);
+
+  useEffect(() => {
+    setConversationVisible(true);
+    return () => setConversationVisible(false);
+  }, [setConversationVisible]);
+
+  // Messages that arrived while the window was in the background become read
+  // once the user is back on this conversation.
+  useEffect(() => {
+    const userId = selectedUser?._id;
+    if (!userId) return;
+    return onWindowReturn(() => {
+      if (useChatStore.getState().unreadCounts[userId] && isReadingConversation(userId)) {
+        void markRead(userId);
+      }
+    });
+  }, [selectedUser?._id, markRead, isReadingConversation]);
 
   useEffect(() => {
     const container = messagesRef.current;
