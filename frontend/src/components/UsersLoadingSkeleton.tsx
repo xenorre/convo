@@ -1,6 +1,6 @@
 function UsersLoadingSkeleton() {
   return (
-    <div className="space-y-2" role="status" aria-label="Loading contacts">
+    <div className="space-y-2" role="status" aria-label="Loading">
       {[1, 2, 3, 4, 5].map((i) => (
         <div
           key={i}

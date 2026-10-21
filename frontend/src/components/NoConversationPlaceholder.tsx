@@ -13,8 +13,8 @@ const NoConversationPlaceholder = () => {
         Select a conversation
       </h3>
       <p className="max-w-xs text-sm leading-relaxed text-slate-400">
-        Choose a contact from the sidebar to start chatting or continue a
-        previous conversation.
+        Choose a chat or a friend from the sidebar to start chatting or
+        continue a previous conversation.
       </p>
     </div>
   );

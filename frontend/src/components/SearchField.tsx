@@ -6,9 +6,10 @@ interface SearchFieldProps {
   onChange: (value: string) => void;
   label: string;
   placeholder?: string;
+  autoFocus?: boolean;
 }
 
-function SearchField({ value, onChange, label, placeholder }: SearchFieldProps) {
+function SearchField({ value, onChange, label, placeholder, autoFocus }: SearchFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const clear = () => {
@@ -33,6 +34,7 @@ function SearchField({ value, onChange, label, placeholder }: SearchFieldProps) 
         type="search"
         aria-label={label}
         placeholder={placeholder}
+        autoFocus={autoFocus}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={handleKeyDown}

@@ -17,15 +17,6 @@ export interface AuthResponse {
   requestId: string;
 }
 
-export interface ContactsResponse {
-  users: Array<{
-    _id: string;
-    fullName: string;
-    profilePic: string;
-  }>;
-  requestId: string;
-}
-
 // Newest message of a conversation, as sent with the chat list.
 // `text` is cut to a short preview on the server.
 export interface ChatLastMessage {

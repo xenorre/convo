@@ -1,5 +1,4 @@
 import {
-  getAllContacts,
   getChats,
   getMessagesById,
   sendMessage,
@@ -18,7 +17,6 @@ const router = express.Router();
 
 router.use(protectRoute);
 
-router.get("/contacts", getAllContacts);
 router.get("/chats", getChats);
 router.get("/:id", validateObjectIdParam("id"), getMessagesById);
 router.post("/mark-read/:id", validateObjectIdParam("id"), markRead);

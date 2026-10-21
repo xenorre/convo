@@ -6,6 +6,7 @@ import type { AppSocket } from '@/types/socket';
 import { notifyIncomingMessage } from '@/utils/messageNotifications';
 import { useAuthStore } from '../useAuthStore';
 import { useChatStore } from '../useChatStore';
+import { useFriendsStore } from '../useFriendsStore';
 import { advanceAuthSession } from '@/services/authSession';
 
 vi.mock('@/services/apiService', () => ({
@@ -50,7 +51,7 @@ describe('incoming message notifications', () => {
     vi.clearAllMocks();
     vi.mocked(apiService.get).mockResolvedValue({ chats: [], unreadCounts: {} });
     vi.mocked(apiService.post).mockResolvedValue({});
-    useChatStore.setState({ ...useChatStore.getInitialState(), activeTab: 'contacts' }, true);
+    useChatStore.setState({ ...useChatStore.getInitialState(), activeTab: 'friends' }, true);
     useAuthStore.setState({
       ...useAuthStore.getInitialState(),
       authUser: {
@@ -61,7 +62,7 @@ describe('incoming message notifications', () => {
       },
       socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
     }, true);
-    useChatStore.setState({ activeTab: 'contacts' });
+    useChatStore.setState({ activeTab: 'friends' });
   });
 
   it('opens a new sender from the event snapshot only when the notification is activated', () => {
@@ -70,7 +71,7 @@ describe('incoming message notifications', () => {
     receiveMessage({ message, sender });
 
     expect(useChatStore.getState().selectedUser).toBeNull();
-    expect(useChatStore.getState().activeTab).toBe('contacts');
+    expect(useChatStore.getState().activeTab).toBe('friends');
     expect(useChatStore.getState().unreadCounts[sender._id]).toBe(1);
     const notification = getNotification();
     expect(notification).toMatchObject({
@@ -87,10 +88,14 @@ describe('incoming message notifications', () => {
     expect(apiService.post).not.toHaveBeenCalled();
   });
 
-  it.each(['chats', 'allContacts'] as const)(
+  it.each([
+    ['chats', () => useChatStore.setState({ chats: [sender] })],
+    ['friends', () => useFriendsStore.setState({ friends: [{ ...sender, since: '2026-10-01' }] })],
+  ])(
     'opens a legacy message sender found in %s without a sender snapshot',
-    collection => {
-      useChatStore.setState({ [collection]: [sender] });
+    (_, arrange) => {
+      useFriendsStore.setState({ friends: [] });
+      arrange();
       const receiveMessage = bindIncomingMessages();
 
       receiveMessage(message);
@@ -152,7 +157,7 @@ describe('incoming message notifications', () => {
     const receiveMessage = bindIncomingMessages();
     receiveMessage({ message, sender });
     const notification = getNotification();
-    useChatStore.setState({ messages: [message], allContacts: [sender], selectedUser: sender });
+    useChatStore.setState({ messages: [message], chats: [sender], selectedUser: sender });
     const socket = useAuthStore.getState().socket!;
 
     advanceAuthSession();
@@ -163,7 +168,7 @@ describe('incoming message notifications', () => {
     expect(socket.off).toHaveBeenCalledWith('newMessage', expect.any(Function));
     expect(socket.off).toHaveBeenCalledWith('connect', expect.any(Function));
     expect(useChatStore.getState()).toMatchObject({
-      messages: [], allContacts: [], chats: [], unreadCounts: {},
+      messages: [], chats: [], unreadCounts: {},
       selectedUser: null, socketBound: false, boundSocket: null,
     });
     expect(notifyIncomingMessage).toHaveBeenCalledOnce();
@@ -172,25 +177,25 @@ describe('incoming message notifications', () => {
   it('clears private data synchronously on logout without waiting for a React effect', () => {
     bindIncomingMessages();
     const socket = useAuthStore.getState().socket!;
-    useChatStore.setState({ messages: [message], allContacts: [sender], selectedUser: sender });
+    useChatStore.setState({ messages: [message], chats: [sender], selectedUser: sender });
 
     useAuthStore.setState({ authUser: null, socket: null });
 
     expect(socket.off).toHaveBeenCalledWith('newMessage', expect.any(Function));
     expect(useChatStore.getState()).toMatchObject({
-      messages: [], allContacts: [], selectedUser: null, boundSocket: null,
+      messages: [], chats: [], selectedUser: null, boundSocket: null,
     });
   });
 
   it('clears private data before binding a replacement account socket', () => {
-    useChatStore.setState({ messages: [message], allContacts: [sender], selectedUser: sender });
+    useChatStore.setState({ messages: [message], chats: [sender], selectedUser: sender });
     const nextSocket = { on: vi.fn(), off: vi.fn() } as unknown as AppSocket;
     const currentUser = useAuthStore.getState().authUser!;
 
     useAuthStore.setState({ authUser: { ...currentUser, _id: 'another-account' }, socket: nextSocket });
 
     expect(useChatStore.getState()).toMatchObject({
-      messages: [], allContacts: [], selectedUser: null, boundSocket: nextSocket,
+      messages: [], chats: [], selectedUser: null, boundSocket: nextSocket,
     });
     expect(nextSocket.on).toHaveBeenCalledWith('newMessage', expect.any(Function));
   });
@@ -200,14 +205,15 @@ describe('incoming message notifications', () => {
     vi.mocked(apiService.get).mockImplementationOnce(() => new Promise(resolve => {
       completeRequest = resolve;
     }));
-    const request = useChatStore.getState().getAllContacts();
+    const request = useChatStore.getState().getMyChatPartners();
 
     advanceAuthSession();
     useChatStore.getState().resetChat();
-    completeRequest({ users: [sender] });
+    completeRequest({ chats: [sender], unreadCounts: { [sender._id]: 1 } });
     await request;
 
-    expect(useChatStore.getState().allContacts).toEqual([]);
+    expect(useChatStore.getState().chats).toEqual([]);
+    expect(useChatStore.getState().unreadCounts).toEqual({});
     expect(useChatStore.getState().isUsersLoading).toBe(false);
   });
 
@@ -237,7 +243,11 @@ describe('incoming message notifications', () => {
       url === '/messages/chats' ? { chats: [sender], unreadCounts: {} } : { messages: [message] }
     );
     bindIncomingMessages();
-    const reconnect = socketOn.mock.calls.find(([event]) => event === 'connect')![1];
+    // The friends store listens for 'connect' on the same socket; take the
+    // handler the chat store registered right after 'newMessage'.
+    const calls = socketOn.mock.calls;
+    const chatBinding = calls.findIndex(([event]) => event === 'newMessage');
+    const reconnect = calls.slice(chatBinding).find(([event]) => event === 'connect')![1];
 
     // The store now binds before the initial connection completes.
     reconnect(undefined);

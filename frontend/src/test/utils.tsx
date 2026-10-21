@@ -26,7 +26,6 @@ export const mockAuthStore = {
 };
 
 export const mockChatStore = {
-  allContacts: [],
   chats: [],
   messages: [],
   activeTab: 'chats' as const,
@@ -35,7 +34,6 @@ export const mockChatStore = {
   isMessagesLoading: false,
   setActiveTab: vi.fn(),
   setSelectedUser: vi.fn(),
-  getAllContacts: vi.fn(),
   getMyChatPartners: vi.fn(),
   getMessagesByUserId: vi.fn(),
   sendMessage: vi.fn(),

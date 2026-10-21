@@ -38,7 +38,7 @@ describe('incoming message notification', () => {
       socket: null,
       checkAuth: vi.fn(async () => {}),
     });
-    useChatStore.setState({ selectedUser: null, activeTab: 'contacts' });
+    useChatStore.setState({ selectedUser: null, activeTab: 'friends' });
     act(() => toast.remove());
   });
 

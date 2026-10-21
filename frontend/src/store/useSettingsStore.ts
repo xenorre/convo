@@ -10,6 +10,8 @@ interface DeviceSettings {
   messagePreviews: boolean;
   // System notification while the Convo tab is in the background.
   desktopNotifications: boolean;
+  // In-app pop-up when someone sends a friend request.
+  friendRequestToasts: boolean;
   motion: MotionPreference;
 }
 
@@ -21,6 +23,7 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   messageToasts: true,
   messagePreviews: true,
   desktopNotifications: false,
+  friendRequestToasts: true,
   motion: "system",
 };
 
@@ -36,10 +39,12 @@ export const useSettingsStore = create<SettingsState>()(
       name: "convo:device-settings",
       version: 1,
       storage: createJSONStorage(() => localStorage),
-      partialize: ({ messageToasts, messagePreviews, desktopNotifications, motion }) => ({
+      // Settings saved before a field existed keep that field's default.
+      partialize: ({ messageToasts, messagePreviews, desktopNotifications, friendRequestToasts, motion }) => ({
         messageToasts,
         messagePreviews,
         desktopNotifications,
+        friendRequestToasts,
         motion,
       }),
     },

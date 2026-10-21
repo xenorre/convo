@@ -169,6 +169,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const connection = Promise.all([
       loadSocketClient(),
       import('./useChatStore'),
+      import('./useFriendsStore'),
     ]).then(([{ io }]) => {
       if (!isCurrentConnection() || get().socket) return;
       const socket: AppSocket = io(env.wsUrl, {

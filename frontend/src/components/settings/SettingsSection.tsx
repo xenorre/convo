@@ -2,7 +2,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-// Same treatments as the existing "Find Contacts" button and ghost buttons.
+// Same treatments as the existing "Find friends" button and ghost buttons.
 export const primaryButtonClass =
   "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-500/10 px-5 py-2 text-sm font-medium text-cyan-300 transition-colors hover:bg-cyan-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-cyan-500/10";
 

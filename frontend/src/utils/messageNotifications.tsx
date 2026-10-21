@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router';
 import toast from 'react-hot-toast';
 import type { Toast } from 'react-hot-toast';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { navigateInApp } from '@/utils/appNavigation';
-import { isWindowInView } from '@/utils/windowAttention';
+import { showSystemNotification } from '@/utils/systemNotifications';
 
 const HIDDEN_PREVIEW = 'New message';
 
@@ -45,38 +44,17 @@ function MessageNotification({
   );
 }
 
-export const canShowSystemNotifications = () => typeof Notification !== 'undefined';
-
-// Only while the user isn't looking at Convo (another tab, another app, or a
-// minimized window). Clicking it brings Convo forward on that conversation.
-function showSystemNotification(
-  messageId: string,
-  senderName: string,
-  body: string,
-  onOpen: () => void,
-) {
-  if (!canShowSystemNotifications() || Notification.permission !== 'granted') return;
-  if (isWindowInView()) return;
-  try {
-    const notification = new Notification(senderName, { body, tag: `msg-${messageId}`, icon: '/favicon.svg' });
-    notification.onclick = () => {
-      window.focus();
-      notification.close();
-      toast.dismiss(`msg-${messageId}`);
-      onOpen();
-      navigateInApp('/');
-    };
-  } catch {
-    // Some browsers only allow notifications from a service worker.
-  }
-}
-
 export function notifyIncomingMessage({ messageId, ...options }: IncomingMessageOptions) {
   const { messageToasts, messagePreviews, desktopNotifications } = useSettingsStore.getState();
   const preview = messagePreviews ? options.preview : HIDDEN_PREVIEW;
 
   if (desktopNotifications) {
-    showSystemNotification(messageId, options.senderName, preview, options.onOpen);
+    showSystemNotification({
+      tag: `msg-${messageId}`,
+      title: options.senderName,
+      body: preview,
+      onOpen: options.onOpen,
+    });
   }
   if (!messageToasts) return undefined;
 

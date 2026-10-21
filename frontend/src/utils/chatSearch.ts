@@ -12,7 +12,8 @@ const queryTerms = (query: string) => normalize(query).split(/\s+/).filter(Boole
 
 // Every word of the query has to appear in the partner's name or in the
 // last message preview, ignoring case and Polish diacritics.
-export function filterChats(chats: ChatSummary[], query: string): ChatSummary[] {
+// Also used for the friends list, which has names but no last message.
+export function filterChats<T extends ChatSummary>(chats: T[], query: string): T[] {
   const terms = queryTerms(query);
   if (terms.length === 0) return chats;
 

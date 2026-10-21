@@ -1,12 +1,17 @@
 import { Socket } from "socket.io-client";
 import type { Message } from "./message";
 import type { Contact } from "./auth";
+import type { FriendRequest } from "./friends";
 
 // Define the socket events that our app uses
 export interface ServerToClientEvents {
   newMessage: (message: Message | { message: Message; sender?: Contact }) => void;
   getOnlineUsers: (userIds: string[]) => void;
   'session:revoked': (data: { code: string; message: string }) => void;
+  'friend:request': (data: { request: FriendRequest }) => void;
+  'friend:accepted': (data: { friendRequestId: string; friend: Contact }) => void;
+  'friend:request:removed': (data: { friendRequestId: string }) => void;
+  'friend:removed': (data: { userId: string }) => void;
 }
 
 export interface ClientToServerEvents {

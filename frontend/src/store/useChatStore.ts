@@ -9,7 +9,8 @@ import { handleStoreError } from "@/utils/errorHandling";
 import { notifyIncomingMessage } from "@/utils/messageNotifications";
 import { isWindowInView } from "@/utils/windowAttention";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
-import type { ChatLastMessage, ContactsResponse, ChatsResponse, MessagesResponse } from "@/types/api";
+import type { ChatLastMessage, ChatsResponse, MessagesResponse } from "@/types/api";
+import { useFriendsStore } from "./useFriendsStore";
 
 // Normalize messages coming from various sources (REST/socket) to ensure
 // senderId/receiverId are plain strings. Some backends may emit populated
@@ -73,11 +74,11 @@ const withLatestMessage = (chats: ChatSummary[], partner: Contact, message: Mess
 };
 
 export const useChatStore = create<ChatStore>((set, get) => ({
-  allContacts: [],
   chats: [],
   unreadCounts: {},
   messages: [],
   activeTab: "chats",
+  friendsView: "list",
   chatSearchQuery: "",
   selectedUser: null,
   isConversationVisible: false,
@@ -93,6 +94,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   setActiveTab: (tab) => set({ activeTab: tab }),
+  setFriendsView: (friendsView) => set({ friendsView }),
   setChatSearchQuery: (chatSearchQuery) => set({ chatSearchQuery }),
   setConversationVisible: (isConversationVisible) => set({ isConversationVisible }),
 
@@ -104,26 +106,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setSelectedUser: (selectedUser) => {
     set({ selectedUser: selectedUser && toContact(selectedUser) });
-  },
-
-  getAllContacts: async () => {
-    const sessionVersion = getAuthSessionVersion();
-    set({ isUsersLoading: true });
-    try {
-      const response = await apiService.get<ContactsResponse>("/messages/contacts");
-      if (!isCurrentAuthSession(sessionVersion)) return;
-      // Extract users array from API response
-      const users = response?.users || [];
-      const allContacts = Array.isArray(users) ? users : [];
-      set({ allContacts });
-    } catch (e) {
-      if (!isCurrentAuthSession(sessionVersion)) return;
-      handleStoreError(e, "Failed to load contacts");
-      // Set empty array on error to prevent map errors
-      set({ allContacts: [] });
-    } finally {
-      if (isCurrentAuthSession(sessionVersion)) set({ isUsersLoading: false });
-    }
   },
 
   getMyChatPartners: async () => {
@@ -297,7 +279,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Move the sender's chat up with this message, adding it from the snapshot (if any) when new
       const senderId = actualMessage.senderId;
       const knownSender = chats.find(chat => String(chat._id) === senderId)
-        || state.allContacts.find(contact => String(contact._id) === senderId);
+        || useFriendsStore.getState().friends.find(friend => String(friend._id) === senderId);
       const senderSnapshot = newMessage?.sender
         || (typeof raw.senderId === 'object' ? raw.senderId : undefined);
       const sender: Contact = {
@@ -343,7 +325,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             if (!isCurrentAuthSession(sessionVersion)) return;
             const currentState = get();
             const contact = currentState.chats.find(chat => String(chat._id) === senderId)
-              || currentState.allContacts.find(user => String(user._id) === senderId)
+              || useFriendsStore.getState().friends.find(friend => String(friend._id) === senderId)
               || sender;
             set({ selectedUser: toContact(contact), activeTab: 'chats' });
           },

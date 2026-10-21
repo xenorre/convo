@@ -10,11 +10,12 @@ export interface ChatSummary extends Contact {
 }
 
 export interface ChatStore {
-  allContacts: Contact[];
   chats: ChatSummary[];
   unreadCounts: Record<string, number>;
   messages: Message[];
-  activeTab: "chats" | "contacts";
+  activeTab: "chats" | "friends";
+  // The Friends tab shows either the list or the add-friend search.
+  friendsView: "list" | "add";
   chatSearchQuery: string;
   selectedUser: Contact | null;
   // Whether the conversation panel is on screen (not e.g. hidden behind Settings).
@@ -25,12 +26,12 @@ export interface ChatStore {
   boundSocket: AppSocket | null;
   unbindSocket: (() => void) | null;
   resetChat: () => void;
-  setActiveTab: (tab: "chats" | "contacts") => void;
+  setActiveTab: (tab: "chats" | "friends") => void;
+  setFriendsView: (view: "list" | "add") => void;
   setChatSearchQuery: (query: string) => void;
   setSelectedUser: (user: Contact | null) => void;
   setConversationVisible: (visible: boolean) => void;
   isReadingConversation: (userId: string) => boolean;
-  getAllContacts: () => Promise<void>;
   getMyChatPartners: () => Promise<void>;
   getMessagesByUserId: (userId: string) => Promise<void>;
   markRead: (userId: string) => Promise<void>;

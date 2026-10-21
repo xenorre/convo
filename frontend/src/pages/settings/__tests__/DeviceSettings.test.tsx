@@ -42,6 +42,16 @@ describe('device settings', () => {
     });
   });
 
+  it('turns friend request pop-ups off separately from message pop-ups', async () => {
+    stubNotification('default');
+    const user = userEvent.setup();
+    renderIn(<NotificationsSettings />);
+
+    await user.click(screen.getByRole('switch', { name: 'Friend requests' }));
+
+    expect(useSettingsStore.getState()).toMatchObject({ friendRequestToasts: false, messageToasts: true });
+  });
+
   it('asks the browser for permission before turning on system notifications', async () => {
     const requestPermission = stubNotification('default', 'granted');
     const user = userEvent.setup();

@@ -1,31 +1,8 @@
-import User from "#src/models/user.model.js";
 import Message from "#src/models/message.model.js";
 import { uploadMessageFile } from "#src/services/storage.service.js";
 import { getChatSummaries } from "#src/services/chat.service.js";
 import logger from "#src/config/logger.js";
 import { io } from "#src/config/socket.js";
-
-export const getAllContacts = async (req, res) => {
-  try {
-    const myId = req.user._id;
-    const filteredUsers = await User.find({
-      _id: { $ne: myId },
-    }).select("-password -email -createdAt -updatedAt");
-
-    res.status(200).json({
-      users: filteredUsers,
-      requestId: req.requestId,
-    });
-  } catch (e) {
-    logger.error("Failed to fetch contacts", {
-      requestId: req.requestId,
-      error: e.message,
-    });
-    res
-      .status(500)
-      .json({ error: "Internal server error", requestId: req.requestId });
-  }
-};
 
 export const getMessagesById = async (req, res) => {
   try {
