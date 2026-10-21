@@ -36,6 +36,11 @@ export interface ChatLastMessage {
   createdAt: string;
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 // Returned by the /users profile endpoints.
 export interface ProfileResponse {
   message: string;

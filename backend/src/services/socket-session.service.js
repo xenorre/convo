@@ -13,6 +13,13 @@ export const revokeSessionSockets = (io, userId, sessionId, reason = SESSION_REV
   io.in(room).disconnectSockets(true);
 };
 
+// Closes a replaced session's sockets without telling the client it was
+// signed out: the same browser continues on a new session and reconnects.
+export const closeSessionSockets = (io, userId, sessionId) => {
+  if (!sessionId) return;
+  io.in(sessionRoom(userId, sessionId)).disconnectSockets(true);
+};
+
 export const joinActiveSession = async (socket, checkSession = isSessionActive) => {
   await socket.join(sessionRoom(socket.userId, socket.sessionId));
 

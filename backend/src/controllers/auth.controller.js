@@ -1,6 +1,15 @@
-import { signInSchema, signUpSchema } from "#validations/auth.validation.js";
+import {
+  changePasswordSchema,
+  signInSchema,
+  signUpSchema,
+} from "#validations/auth.validation.js";
 import { formatValidationError } from "#utils/format.js";
-import { authenticateUser, createUser } from "#services/auth.service.js";
+import {
+  authenticateUser,
+  changeUserPassword,
+  createUser,
+  PASSWORD_ERRORS,
+} from "#services/auth.service.js";
 import { jwttoken } from "#utils/jwt.js";
 import { cookies } from "#utils/cookies.js";
 import { sendWelcomeEmail } from "#src/services/email.service.js";
@@ -10,8 +19,12 @@ import {
   activateSession,
   createSessionId,
   endSession,
+  SESSION_REVOKED,
 } from "#services/session.service.js";
-import { revokeSessionSockets } from "#services/socket-session.service.js";
+import {
+  closeSessionSockets,
+  revokeSessionSockets,
+} from "#services/socket-session.service.js";
 import { io } from "#config/socket.js";
 
 const startUserSession = async (user, res) => {
@@ -116,6 +129,62 @@ export const login = async (req, res) => {
         .json({ error: "Invalid email or password", requestId: req.requestId });
     }
 
+    res
+      .status(500)
+      .json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const validationResult = changePasswordSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      return res.status(400).json({
+        error: "Validation failed",
+        details: formatValidationError(validationResult.error),
+        requestId: req.requestId,
+      });
+    }
+
+    const userId = req.user.id;
+    const nextSessionId = createSessionId();
+    await changeUserPassword({
+      userId,
+      sessionId: req.sessionId,
+      nextSessionId,
+      ...validationResult.data,
+    });
+
+    // This browser keeps going on the new session; sockets of the old one
+    // close quietly and the client reconnects with the new cookie.
+    closeSessionSockets(io, userId, req.sessionId);
+    cookies.set(res, "token", jwttoken.sign({ id: userId, sid: nextSessionId }));
+
+    res.status(200).json({
+      message: "Password changed successfully",
+      requestId: req.requestId,
+    });
+  } catch (e) {
+    // 400, not 401: the client treats every 401 as a signed-out session.
+    if (e.message === PASSWORD_ERRORS.INVALID_CURRENT) {
+      return res.status(400).json({
+        error: "Current password is incorrect",
+        code: PASSWORD_ERRORS.INVALID_CURRENT,
+        requestId: req.requestId,
+      });
+    }
+    if (e.message === PASSWORD_ERRORS.SESSION_ENDED) {
+      return res.status(401).json({
+        error: SESSION_REVOKED.message,
+        code: SESSION_REVOKED.code,
+        requestId: req.requestId,
+      });
+    }
+
+    logger.error("Error changing password", {
+      requestId: req.requestId,
+      error: e.message,
+    });
     res
       .status(500)
       .json({ error: "Internal server error", requestId: req.requestId });

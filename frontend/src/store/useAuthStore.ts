@@ -212,6 +212,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return connection;
   },
 
+  reconnectSocket: () => {
+    get().disconnectSocket();
+    return get().connectSocket();
+  },
+
   disconnectSocket: () => {
     latestSocketConnection++;
     pendingSocketConnection = undefined;

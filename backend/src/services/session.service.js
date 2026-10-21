@@ -27,6 +27,18 @@ export const activateSession = async (userId, sessionId) => {
   return previousUser.activeSessionId;
 };
 
+// Replaces the session only if it is still the active one, so a request
+// from a session that was just signed out cannot take the account back.
+// `extraUpdate` is applied in the same atomic write.
+export const rotateSession = async (userId, currentSessionId, nextSessionId, extraUpdate = {}) => {
+  if (typeof currentSessionId !== "string" || !currentSessionId) return false;
+  const result = await User.updateOne(
+    { _id: userId, activeSessionId: currentSessionId },
+    { $set: { ...extraUpdate, activeSessionId: nextSessionId } }
+  );
+  return result.modifiedCount > 0;
+};
+
 export const endSession = async (userId, sessionId) => {
   if (typeof sessionId !== "string" || !sessionId) return false;
 

@@ -43,4 +43,6 @@ export interface AuthState {
   forceLogout: (message?: string, sessionVersion?: number) => void;
   connectSocket: () => Promise<void>;
   disconnectSocket: () => void;
+  // Opens a fresh socket, e.g. after the server moved this browser to a new session.
+  reconnectSocket: () => Promise<void>;
 }
