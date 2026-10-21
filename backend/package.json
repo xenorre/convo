@@ -7,6 +7,7 @@
     "start": "node src/index.js",
     "build": "echo 'No build step needed for Node.js'",
     "test": "node --test",
+    "migrate": "node scripts/migrate.js",
     "lint": "echo 'Add linting here'",
     "lint:fix": "echo 'Add lint fixing here'",
     "docker:build": "docker build -t convo-backend .",

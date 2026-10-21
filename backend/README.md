@@ -101,6 +101,7 @@ package.json scripts (selected):
 - npm run fullstack:up|down|logs
 - npm run production:up|down|logs
 - npm run health — GET /healthz check
+- npm run migrate — apply pending data migrations now (see Data migrations)
 
 Helper scripts (scripts/):
 
@@ -150,6 +151,20 @@ Real-time (Socket.IO)
 - Online Users: server emits getOnlineUsers with [userId]
 - New Message: server emits newMessage with payload { message }
 - Replaced session: server emits `session:revoked` with `{ code: "SESSION_REVOKED", message }`, then disconnects that session's sockets
+
+## Data migrations
+
+Data migrations live in `src/migrations/index.js` and run automatically: every
+server start applies the ones this database has not seen, in the background
+after the server starts listening, so no deploy platform needs an extra step.
+The `migrations` collection records each one; with several instances only one
+claims a migration and the others skip it. A failed migration is logged, the
+app keeps running, and the next start retries it. Run `npm run migrate` to
+apply them immediately (it exits non-zero if one fails).
+
+- `2026-10-friends-from-chat-partners` — everyone who already exchanged a
+  message becomes friends, so nobody loses their conversations when the
+  friends list replaces the contacts list.
 
 ## Login sessions
 

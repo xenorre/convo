@@ -4,6 +4,7 @@ import logger from "#config/logger.js";
 import { server, initializeSocketInfrastructure } from "./config/socket.js";
 import "./app.js";
 import mongoose from "mongoose";
+import { runMigrations } from "#src/migrations/runner.js";
 
 const PORT = ENV.PORT || 3000;
 
@@ -15,6 +16,10 @@ const start = async () => {
     server.listen(PORT, () => {
       logger.info(`Server is running on http://localhost:${PORT}`);
     });
+    // In the background, so a long first run cannot fail health checks.
+    runMigrations().catch((error) =>
+      logger.error("Could not run data migrations", { error: error.message })
+    );
   } catch (err) {
     logger.error("Failed to start server", { error: err.message });
     process.exit(1);

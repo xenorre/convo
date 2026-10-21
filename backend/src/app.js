@@ -22,6 +22,7 @@ import { app } from "./config/socket.js";
 import authRoutes from "#routes/auth.routes.js";
 import userRoutes from "#routes/user.routes.js";
 import messageRoutes from "#routes/message.routes.js";
+import friendRoutes from "#routes/friend.routes.js";
 import securityMiddleware from "#src/middleware/security.middleware.js";
 import {
   ensureCsrfTokenCookie,
@@ -87,6 +88,7 @@ app.get("/readyz", async (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/friends", friendRoutes);
 
 if (ENV.NODE_ENV !== "production") {
   app.get("/", (req, res) => {
