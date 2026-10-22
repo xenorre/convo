@@ -56,6 +56,14 @@ export interface ChatsResponse {
     lastMessage: ChatLastMessage;
   }>;
   unreadCounts?: Record<string, number>;
+  // Chats muted by this user: peer ID → end of the mute, or null for no end.
+  mutes?: Record<string, string | null>;
+  requestId: string;
+}
+
+export interface MuteChatResponse {
+  userId: string;
+  mutedUntil: string | null;
   requestId: string;
 }
 

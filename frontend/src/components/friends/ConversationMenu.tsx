@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { MoreHorizontalIcon } from "lucide-react";
+import { ArrowLeftIcon, MoreHorizontalIcon } from "lucide-react";
 import { useRelationship } from "@/hooks/useRelationship";
+import { useChatStore } from "@/store/useChatStore";
 import { useFriendsStore } from "@/store/useFriendsStore";
+import { MUTE_OPTIONS, describeMute, isChatMuted } from "@/utils/chatMute";
 import type { Contact } from "@/types/auth";
 import DeleteChatDialog from "@/components/DeleteChatDialog";
 import BlockConfirm from "./BlockConfirm";
@@ -11,12 +13,14 @@ const itemBase =
 const itemClass = `${itemBase} text-slate-200`;
 const dangerItemClass = `${itemBase} text-red-300`;
 
-// "⋯" in the conversation header: add friend, block or unblock this person,
-// or delete the chat.
+// "⋯" in the conversation header: add friend, mute, block or unblock this
+// person, or delete the chat.
 function ConversationMenu({ user }: { user: Contact }) {
   const { sendRequest, acceptRequest, unblockUser } = useFriendsStore();
   const { state, request } = useRelationship(user._id);
-  const [view, setView] = useState<"closed" | "menu" | "block">("closed");
+  const { mutes, muteChat, unmuteChat } = useChatStore();
+  const isMuted = isChatMuted(mutes, String(user._id));
+  const [view, setView] = useState<"closed" | "menu" | "block" | "mute">("closed");
   const [isBusy, setIsBusy] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -74,6 +78,33 @@ function ConversationMenu({ user }: { user: Contact }) {
             <div className="p-2">
               <BlockConfirm user={user} onDone={() => setView("closed")} />
             </div>
+          ) : view === "mute" ? (
+            <div role="group" aria-labelledby={`${menuId}-mute`}>
+              <div className="flex items-center gap-1 px-1">
+                <button
+                  type="button"
+                  aria-label="Back"
+                  className="inline-flex size-9 cursor-pointer items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-100 focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  onClick={() => setView("menu")}
+                >
+                  <ArrowLeftIcon className="size-4" aria-hidden="true" />
+                </button>
+                <p id={`${menuId}-mute`} className="text-xs font-medium text-slate-400">
+                  Mute message notifications
+                </p>
+              </div>
+              {MUTE_OPTIONS.map(({ duration, label }) => (
+                <button
+                  key={duration}
+                  type="button"
+                  className={itemClass}
+                  disabled={isBusy}
+                  onClick={() => run(() => muteChat(user, duration))}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           ) : (
             <>
               {state === "none" && (
@@ -88,6 +119,23 @@ function ConversationMenu({ user }: { user: Contact }) {
               )}
               {state === "outgoing" && (
                 <p className="flex min-h-11 items-center px-3 text-sm text-slate-400">Friend request sent</p>
+              )}
+              {isMuted ? (
+                <button
+                  type="button"
+                  className={`${itemClass} py-1.5`}
+                  disabled={isBusy}
+                  onClick={() => run(() => unmuteChat(user))}
+                >
+                  <span className="flex flex-col">
+                    Unmute notifications
+                    <span className="text-xs text-slate-400">{describeMute(mutes[String(user._id)])}</span>
+                  </span>
+                </button>
+              ) : (
+                <button type="button" className={itemClass} onClick={() => setView("mute")}>
+                  Mute notifications
+                </button>
               )}
               {state === "blocked" ? (
                 <button type="button" className={itemClass} disabled={isBusy} onClick={() => run(() => unblockUser(user))}>

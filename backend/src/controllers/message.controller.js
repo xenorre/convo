@@ -9,13 +9,15 @@ import {
   editMessage as editMessageText,
   viewersOf,
 } from "#src/services/message.service.js";
-import { messageDeleteQuerySchema, messageEditSchema } from "#validations/message.validation.js";
+import { chatMuteSchema, messageDeleteQuerySchema, messageEditSchema } from "#validations/message.validation.js";
 import { formatValidationError } from "#src/utils/format.js";
 import {
   CHAT_ERRORS,
   deleteChatForUser,
   getChatDeletedBefore,
   getChatSummaries,
+  muteChat as muteChatFor,
+  unmuteChat as unmuteChatFor,
 } from "#src/services/chat.service.js";
 import logger from "#src/config/logger.js";
 import { io } from "#src/config/socket.js";
@@ -167,11 +169,12 @@ export const markRead = async (req, res) => {
 
 export const getChats = async (req, res) => {
   try {
-    const { chats, unreadCounts } = await getChatSummaries(req.user._id);
+    const { chats, unreadCounts, mutes } = await getChatSummaries(req.user._id);
 
     res.status(200).json({
       chats,
       unreadCounts,
+      mutes,
       requestId: req.requestId,
     });
   } catch (e) {
@@ -275,5 +278,43 @@ export const deleteMessage = async (req, res) => {
     res.status(200).json({ messageId, peerId, requestId: req.requestId });
   } catch (e) {
     sendMessageError(req, res, e, "delete");
+  }
+};
+
+// Muting only changes what this user's own devices notify them about, so the
+// other person is never told.
+export const muteChat = async (req, res) => {
+  const parsed = chatMuteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Validation failed",
+      details: formatValidationError(parsed.error),
+      requestId: req.requestId,
+    });
+  }
+
+  try {
+    const { id: peerId } = req.params;
+    const { mutedUntil } = await muteChatFor(req.user._id, peerId, parsed.data.duration);
+    io.to(`user:${req.user._id}`).emit("chat:muted", { userId: peerId, mutedUntil });
+    res.status(200).json({ userId: peerId, mutedUntil, requestId: req.requestId });
+  } catch (e) {
+    if (e.message === CHAT_ERRORS.SELF) {
+      return res.status(400).json({ error: "You can't mute a chat with yourself", requestId: req.requestId });
+    }
+    logger.error("Failed to mute chat", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+export const unmuteChat = async (req, res) => {
+  try {
+    const { id: peerId } = req.params;
+    await unmuteChatFor(req.user._id, peerId);
+    io.to(`user:${req.user._id}`).emit("chat:unmuted", { userId: peerId });
+    res.status(200).json({ userId: peerId, requestId: req.requestId });
+  } catch (e) {
+    logger.error("Failed to unmute chat", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
   }
 };

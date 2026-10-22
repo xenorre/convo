@@ -2,6 +2,7 @@ import type { Contact } from "./auth";
 import type { Message, MessageDeleteScope } from "./message";
 import type { AppSocket } from "./socket";
 import type { ChatLastMessage } from "./api";
+import type { MuteDuration } from "@/utils/chatMute";
 
 // A conversation in the chat list. lastMessage is optional so the list still
 // renders when a server response does not include it.
@@ -26,6 +27,8 @@ export interface ChatStore {
   // When each chat deleted in this session was deleted, so a message from
   // before that which arrives late doesn't bring it back.
   deletedChats: Record<string, string>;
+  // Chats whose message notifications are off: peer ID → end, or null for no end.
+  mutes: Record<string, string | null>;
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
   socketBound: boolean;
@@ -43,6 +46,8 @@ export interface ChatStore {
   markRead: (userId: string) => Promise<void>;
   // Deletes the whole history with this person for the current user.
   deleteChat: (user: Contact) => Promise<boolean>;
+  muteChat: (user: Contact, duration: MuteDuration) => Promise<boolean>;
+  unmuteChat: (user: Contact) => Promise<boolean>;
   // The sender's own messages, within the edit window.
   editMessage: (messageId: string, text: string) => Promise<boolean>;
   deleteMessage: (message: Message, scope: MessageDeleteScope) => Promise<boolean>;

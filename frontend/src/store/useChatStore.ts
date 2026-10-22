@@ -14,10 +14,12 @@ import type {
   ChatsResponse,
   DeleteChatResponse,
   HideMessageResponse,
+  MuteChatResponse,
   MessageChangeResponse,
   MessagesResponse,
 } from "@/types/api";
 import { useFriendsStore } from "./useFriendsStore";
+import { isChatMuted } from "@/utils/chatMute";
 
 // Normalize messages coming from various sources (REST/socket) to ensure
 // senderId/receiverId are plain strings. Some backends may emit populated
@@ -122,6 +124,12 @@ const withoutMessage = (state: ChatStore, messageId: string, peerId: string) => 
   return { changes: { messages, chats }, refetch: false };
 };
 
+const withoutMute = (mutes: Record<string, string | null>, userId: string) => {
+  const rest = { ...mutes };
+  delete rest[userId];
+  return rest;
+};
+
 const changeErrorMessage = (error: unknown, fallback: string) => {
   const apiError = createApiError(error);
   return apiError.status >= 400 && apiError.status < 500 ? apiError.message : fallback;
@@ -143,6 +151,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isConversationVisible: false,
   messagingRevision: 0,
   deletedChats: {},
+  mutes: {},
   isUsersLoading: false,
   isMessagesLoading: false,
   socketBound: false,
@@ -178,7 +187,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const chatsData = response?.chats || [];
       const chats = Array.isArray(chatsData) ? chatsData : [];
       const unreadCounts = response?.unreadCounts || {};
-      set({ chats, unreadCounts });
+      set({ chats, unreadCounts, mutes: response?.mutes || {} });
     } catch (e) {
       if (!isCurrentAuthSession(sessionVersion)) return;
       handleStoreError(e, "Failed to load chat partners");
@@ -233,6 +242,38 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (isCurrentAuthSession(sessionVersion)) {
         const apiError = createApiError(e);
         handleStoreError(e, apiError.status === 429 ? apiError.message : "Couldn't delete the chat. Try again later.");
+      }
+      return false;
+    }
+  },
+
+  muteChat: async (user, duration) => {
+    const sessionVersion = getAuthSessionVersion();
+    try {
+      const { mutedUntil } = await apiService.put<MuteChatResponse>(`/messages/chats/${user._id}/mute`, { duration });
+      if (!isCurrentAuthSession(sessionVersion)) return false;
+      set((state) => ({ mutes: { ...state.mutes, [String(user._id)]: mutedUntil } }));
+      toast.success(`Notifications off for ${user.fullName}`);
+      return true;
+    } catch (e) {
+      if (isCurrentAuthSession(sessionVersion)) {
+        handleStoreError(e, changeErrorMessage(e, "Couldn't mute the chat. Try again later."));
+      }
+      return false;
+    }
+  },
+
+  unmuteChat: async (user) => {
+    const sessionVersion = getAuthSessionVersion();
+    try {
+      await apiService.delete(`/messages/chats/${user._id}/mute`);
+      if (!isCurrentAuthSession(sessionVersion)) return false;
+      set((state) => ({ mutes: withoutMute(state.mutes, String(user._id)) }));
+      toast.success(`Notifications on for ${user.fullName}`);
+      return true;
+    } catch (e) {
+      if (isCurrentAuthSession(sessionVersion)) {
+        handleStoreError(e, changeErrorMessage(e, "Couldn't unmute the chat. Try again later."));
       }
       return false;
     }
@@ -424,6 +465,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       // Mark read only if the user is looking at this conversation right now;
       // otherwise count it and alert, even when the chat is open behind another window.
+      // A muted chat still counts, but stays quiet.
       if (get().isReadingConversation(senderId)) {
         get().markRead(senderId);
       } else {
@@ -433,6 +475,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             [senderId]: (s.unreadCounts[senderId] || 0) + 1,
           },
         }));
+        if (isChatMuted(get().mutes, senderId)) return;
 
         const preview = actualMessage.text
           ? (actualMessage.text.length > 60 ? actualMessage.text.slice(0, 57) + '…' : actualMessage.text)
@@ -496,6 +539,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       });
     };
 
+    // Muted or unmuted in another tab.
+    const onChatMuted = ({ userId, mutedUntil }: { userId: string; mutedUntil: string | null }) => {
+      if (!isActiveSocket()) return;
+      set((state) => ({ mutes: { ...state.mutes, [String(userId)]: mutedUntil } }));
+    };
+    const onChatUnmuted = ({ userId }: { userId: string }) => {
+      if (!isActiveSocket()) return;
+      set((state) => ({ mutes: withoutMute(state.mutes, String(userId)) }));
+    };
+
     // Deleted for this user in another tab.
     const onMessageHidden = ({ messageId, peerId }: { messageId: string; peerId: string }) => {
       if (!isActiveSocket()) return;
@@ -510,6 +563,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     socket.on("message:updated", onMessageUpdated);
     socket.on("message:deleted", onMessageDeleted);
     socket.on("message:hidden", onMessageHidden);
+    socket.on("chat:muted", onChatMuted);
+    socket.on("chat:unmuted", onChatUnmuted);
     set({
       socketBound: true,
       boundSocket: socket,
@@ -520,6 +575,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         socket.off("message:updated", onMessageUpdated);
         socket.off("message:deleted", onMessageDeleted);
         socket.off("message:hidden", onMessageHidden);
+        socket.off("chat:muted", onChatMuted);
+        socket.off("chat:unmuted", onChatUnmuted);
       },
     });
   },
@@ -533,6 +590,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // No-op: global socket handler remains bound for real-time updates
   },
 }));
+
+// Timed mutes leave the list when they end, so the chat list and header
+// stop showing them without waiting for a reload.
+const muteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+// setTimeout can't wait longer than about 24.8 days; mutes last at most a day.
+const MAX_TIMER_MS = 2 ** 31 - 1;
+const scheduleMuteEnds = (mutes: Record<string, string | null>) => {
+  muteTimers.forEach((timer) => clearTimeout(timer));
+  muteTimers.clear();
+  for (const [userId, mutedUntil] of Object.entries(mutes)) {
+    if (mutedUntil === null) continue;
+    const delay = Math.min(Math.max(Date.parse(mutedUntil) - Date.now(), 0), MAX_TIMER_MS);
+    muteTimers.set(userId, setTimeout(() => {
+      const current = useChatStore.getState().mutes;
+      if (current[userId] === mutedUntil) useChatStore.setState({ mutes: withoutMute(current, userId) });
+    }, delay));
+  }
+};
+const unsubscribeMutes = useChatStore.subscribe((state, previous) => {
+  if (state.mutes !== previous.mutes) scheduleMuteEnds(state.mutes);
+});
 
 // This module loads after authentication. Own the session lifecycle here so
 // account changes clear private state synchronously, before React can render it.
@@ -556,6 +634,8 @@ if (useAuthStore.getState().socket) useChatStore.getState().bindSocketOnce();
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     unsubscribeAuth();
+    unsubscribeMutes();
+    scheduleMuteEnds({});
     useChatStore.getState().unbindSocket?.();
   });
 }

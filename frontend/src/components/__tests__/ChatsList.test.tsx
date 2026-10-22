@@ -79,4 +79,17 @@ describe('ChatsList', () => {
     expect(useChatStore.getState().chatSearchQuery).toBe('');
     expect(screen.getAllByRole('heading')).toHaveLength(4);
   });
+
+  it('marks a muted chat and greys out its unread count', async () => {
+    vi.mocked(apiService.get).mockResolvedValue({
+      chats: [{ _id: 'anna-id', fullName: 'Anna', profilePic: '', lastMessage: lastMessage('anna-id', 'See you at 5') }],
+      unreadCounts: { 'anna-id': 2 },
+      mutes: { 'anna-id': null },
+    });
+    render(<ChatsList />);
+
+    const row = await screen.findByRole('button', { name: /Anna/ });
+    expect(within(row).getByRole('img', { name: 'Muted' })).toBeInTheDocument();
+    expect(within(row).getByLabelText('2 unread messages')).toHaveClass('text-slate-300');
+  });
 });

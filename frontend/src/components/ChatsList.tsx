@@ -4,9 +4,10 @@ import UsersLoadingSkeleton from "./UsersLoadingSkeleton";
 import NoChatsFound from "./NoChatsFound";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { ChatSummary } from "@/types/chat";
-import { PaperclipIcon, UserRoundIcon } from "lucide-react";
+import { BellOffIcon, PaperclipIcon, UserRoundIcon } from "lucide-react";
 import { formatChatTimestamp, formatFullTimestamp } from "@/utils/chatTimestamp";
 import { filterChats } from "@/utils/chatSearch";
+import { isChatMuted } from "@/utils/chatMute";
 
 const NoSearchResults = ({ query, onClear }: { query: string; onClear: () => void }) => (
   <div className="flex min-w-0 flex-col items-center gap-3 px-3 py-10 text-center">
@@ -57,6 +58,7 @@ const ChatItem = memo(
     isOnline,
     isSelected,
     unread,
+    isMuted,
     onSelect,
   }: {
     chat: ChatSummary;
@@ -64,6 +66,7 @@ const ChatItem = memo(
     isOnline: boolean;
     isSelected: boolean;
     unread: number;
+    isMuted: boolean;
     onSelect: (chat: ChatSummary) => void;
   }) => {
     const handleClick = useCallback(() => onSelect(chat), [chat, onSelect]);
@@ -99,13 +102,22 @@ const ChatItem = memo(
               </div>
             </div>
             <div className="min-w-0 flex-1">
-              <h4
-                className="truncate text-sm font-medium text-slate-200"
-                title={chat.fullName}
-              >
-                {chat.fullName}
-                {lastMessage && <span className="sr-only"> ({status})</span>}
-              </h4>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <h4
+                  className="truncate text-sm font-medium text-slate-200"
+                  title={chat.fullName}
+                >
+                  {chat.fullName}
+                  {lastMessage && <span className="sr-only"> ({status})</span>}
+                </h4>
+                {isMuted && (
+                  <BellOffIcon
+                    className="size-3.5 shrink-0 text-slate-500"
+                    role="img"
+                    aria-label="Muted"
+                  />
+                )}
+              </div>
               <p
                 className={`mt-1 flex min-w-0 items-center gap-1 text-xs ${unread > 0 ? "text-slate-300" : "text-slate-400"}`}
               >
@@ -125,7 +137,7 @@ const ChatItem = memo(
               <time
                 dateTime={lastMessage.createdAt}
                 title={formatFullTimestamp(lastMessage.createdAt)}
-                className={`text-xs ${unread > 0 ? "text-cyan-300" : "text-slate-400"}`}
+                className={`text-xs ${unread > 0 && !isMuted ? "text-cyan-300" : "text-slate-400"}`}
               >
                 {formatChatTimestamp(lastMessage.createdAt)}
               </time>
@@ -133,7 +145,12 @@ const ChatItem = memo(
             {unread > 0 && (
               <span
                 aria-label={`${unread} unread messages`}
-                className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-cyan-400/15 px-2 text-xs font-semibold text-cyan-300 ring-1 ring-inset ring-cyan-400/20"
+                // A muted chat's count is grey, so it doesn't call for attention.
+                className={`inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-2 text-xs font-semibold ring-1 ring-inset ${
+                  isMuted
+                    ? "bg-slate-500/15 text-slate-300 ring-slate-400/20"
+                    : "bg-cyan-400/15 text-cyan-300 ring-cyan-400/20"
+                }`}
               >
                 {unread > 99 ? "99+" : unread}
               </span>
@@ -152,6 +169,7 @@ function ChatsList() {
     getMyChatPartners,
     chats,
     unreadCounts,
+    mutes,
     isUsersLoading,
     selectedUser,
     setSelectedUser,
@@ -212,6 +230,7 @@ function ChatsList() {
           isOnline={onlineUsersSet.has(chat._id)}
           isSelected={selectedUser?._id === chat._id}
           unread={unreadCounts[chat._id] || 0}
+          isMuted={isChatMuted(mutes, String(chat._id))}
           onSelect={handleSelectUser}
         />
       ))}

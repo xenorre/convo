@@ -8,7 +8,7 @@ import { useFriendsStore } from '@/store/useFriendsStore';
 import ChatContainer from '@/components/ChatContainer';
 
 vi.mock('@/services/apiService', () => ({
-  apiService: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
+  apiService: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
 vi.mock('react-hot-toast', () => ({
   default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }),
@@ -232,6 +232,53 @@ describe('Conversation menu and blocked conversations', () => {
       expect(useChatStore.getState().chats).toHaveLength(1);
       expect(screen.getByRole('alertdialog', { name: 'Delete forever?' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Delete forever' })).toBeEnabled();
+    });
+  });
+
+  describe('muting', () => {
+    it('mutes for a chosen time, shows it, and unmutes', async () => {
+      const user = userEvent.setup();
+      const until = new Date(Date.now() + 8 * 3600 * 1000).toISOString();
+      vi.mocked(apiService.put).mockResolvedValue({ userId: 'sam', mutedUntil: until });
+      vi.mocked(apiService.delete).mockResolvedValue({ userId: 'sam' });
+      await openMenu(user);
+
+      await user.click(screen.getByRole('button', { name: 'Mute notifications' }));
+      const options = screen.getByRole('group', { name: 'Mute message notifications' });
+      expect(within(options).getAllByRole('button').map((button) => button.textContent)).toEqual([
+        '', 'For 1 hour', 'For 8 hours', 'For 24 hours', 'Until I turn it back on',
+      ]);
+      await user.click(screen.getByRole('button', { name: 'For 8 hours' }));
+
+      expect(apiService.put).toHaveBeenCalledWith('/messages/chats/sam/mute', { duration: '8h' });
+      expect(useChatStore.getState().mutes).toEqual({ sam: until });
+      expect(screen.getByRole('img', { name: /^Muted until/ })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'More actions for Sam Stranger' }));
+      await user.click(screen.getByRole('button', { name: /Unmute notifications/ }));
+
+      expect(apiService.delete).toHaveBeenCalledWith('/messages/chats/sam/mute');
+      expect(useChatStore.getState().mutes).toEqual({});
+      expect(screen.queryByRole('img', { name: /^Muted until/ })).toBeNull();
+    });
+
+    it('Back returns to the menu without muting', async () => {
+      const user = userEvent.setup();
+      await openMenu(user);
+
+      await user.click(screen.getByRole('button', { name: 'Mute notifications' }));
+      await user.click(screen.getByRole('button', { name: 'Back' }));
+
+      expect(screen.getByRole('button', { name: 'Mute notifications' })).toBeInTheDocument();
+      expect(apiService.put).not.toHaveBeenCalled();
+    });
+
+    it('says how long a chat stays muted', async () => {
+      const user = userEvent.setup();
+      useChatStore.setState({ mutes: { sam: null } });
+      await openMenu(user);
+
+      expect(screen.getByRole('button', { name: /Unmute notifications/ })).toHaveTextContent('Muted until you turn it back on');
     });
   });
 });

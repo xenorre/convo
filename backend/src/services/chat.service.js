@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ChatDeletion from "#src/models/chatDeletion.model.js";
+import ChatMute from "#src/models/chatMute.model.js";
 import Message from "#src/models/message.model.js";
 import User from "#src/models/user.model.js";
 import { deleteFile } from "#src/services/storage.service.js";
@@ -128,9 +129,43 @@ export const buildChatSummariesPipeline = (userId, deletions = []) => {
   ];
 };
 
+const MUTE_DURATIONS_MS = Object.freeze({
+  "1h": 60 * 60 * 1000,
+  "8h": 8 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  forever: null,
+});
+
+// Mutes still in force, as { [peerId]: ISO date | null }; null means until
+// the user turns notifications back on. The TTL index removes ended ones
+// only about once a minute, so the date is checked here too.
+export const getActiveMutes = async (userId, now = new Date()) => {
+  const mutes = await ChatMute.find({
+    userId,
+    $or: [{ mutedUntil: null }, { mutedUntil: { $gt: now } }],
+  })
+    .select("peerId mutedUntil")
+    .lean();
+  return Object.fromEntries(
+    mutes.map(({ peerId, mutedUntil }) => [String(peerId), mutedUntil ? mutedUntil.toISOString() : null])
+  );
+};
+
+export const muteChat = async (userId, peerId, duration, now = new Date()) => {
+  if (String(userId) === String(peerId)) throw new Error(CHAT_ERRORS.SELF);
+  const ms = MUTE_DURATIONS_MS[duration];
+  const mutedUntil = ms === null ? null : new Date(now.getTime() + ms);
+  await ChatMute.updateOne({ userId, peerId }, { $set: { mutedUntil } }, { upsert: true });
+  return { mutedUntil };
+};
+
+export const unmuteChat = async (userId, peerId) => {
+  await ChatMute.deleteOne({ userId, peerId });
+};
+
 // Chats come back newest first. unreadCounts keeps the shape clients already use.
 export const getChatSummaries = async (userId) => {
-  const deletions = await getChatDeletions(userId);
+  const [deletions, mutes] = await Promise.all([getChatDeletions(userId), getActiveMutes(userId)]);
   const rows = await Message.aggregate(buildChatSummariesPipeline(userId, deletions));
 
   const unreadCounts = {};
@@ -139,7 +174,7 @@ export const getChatSummaries = async (userId) => {
     return chat;
   });
 
-  return { chats, unreadCounts };
+  return { chats, unreadCounts, mutes };
 };
 
 // Removes the messages both people deleted, with their attachments. Files go

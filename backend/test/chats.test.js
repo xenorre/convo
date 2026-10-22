@@ -13,10 +13,12 @@ process.env.LOG_TO_FILES = "false";
 const { default: mongoose } = await import("mongoose");
 const { default: Message } = await import("../src/models/message.model.js");
 const { default: ChatDeletion } = await import("../src/models/chatDeletion.model.js");
+const { default: ChatMute } = await import("../src/models/chatMute.model.js");
 const { default: logger } = await import("../src/config/logger.js");
 const { buildChatSummariesPipeline, LAST_MESSAGE_PREVIEW_LENGTH } =
   await import("../src/services/chat.service.js");
-const { deleteChat, getChats, getMessagesById } = await import("../src/controllers/message.controller.js");
+const { deleteChat, getChats, getMessagesById, muteChat, unmuteChat } =
+  await import("../src/controllers/message.controller.js");
 const { io } = await import("../src/config/socket.js");
 const { s3Storage } = await import("../src/config/storage.js");
 
@@ -28,10 +30,13 @@ const leanQuery = (result) => {
   return query;
 };
 
-// Every test starts with no deleted chats; the deletion tests replace these.
+// Every test starts with no deleted or muted chats; their tests replace these.
 let deletions;
+let mutes;
 beforeEach(() => {
   deletions = [];
+  mutes = [];
+  mock.method(ChatMute, "find", () => leanQuery(mutes));
   mock.method(ChatDeletion, "find", (filter) =>
     leanQuery(deletions.filter((d) => !filter.userId || String(d.userId) === String(filter.userId))));
   mock.method(ChatDeletion, "findOne", ({ userId, peerId }) =>
@@ -59,7 +64,7 @@ test("chat list is one aggregation that never loads a message list into Node", a
 
   assert.equal(aggregate.mock.callCount(), 1);
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.body, { chats: [], unreadCounts: {}, requestId: "req-1" });
+  assert.deepEqual(res.body, { chats: [], unreadCounts: {}, mutes: {}, requestId: "req-1" });
 });
 
 test("aggregation matches on ObjectIds, since aggregate() does not cast strings", () => {
@@ -243,4 +248,75 @@ test("a chat with yourself can't be deleted", async () => {
 
   assert.equal(res.statusCode, 400);
   assert.equal(upsert.mock.callCount(), 0);
+});
+
+const muteRequest = (body, peer = partnerId) => ({ user: { _id: myId }, params: { id: peer }, body, requestId: "req-mute" });
+
+test("muting saves an end time for timed mutes and none for until-turned-back-on", async () => {
+  const upsert = mock.method(ChatMute, "updateOne", () => Promise.resolve({}));
+  const events = trackSocketEvents();
+
+  const before = Date.now();
+  const res = response();
+  await muteChat(muteRequest({ duration: "8h" }), res);
+
+  assert.equal(res.statusCode, 200);
+  const [filter, update, options] = upsert.mock.calls[0].arguments;
+  assert.deepEqual(filter, { userId: myId, peerId: partnerId });
+  assert.deepEqual(options, { upsert: true });
+  const ends = update.$set.mutedUntil.getTime() - before;
+  assert.ok(ends >= 8 * 3600 * 1000 && ends < 8 * 3600 * 1000 + 5000);
+  // Only the user's own tabs hear about it.
+  assert.deepEqual(events.map(({ room, event }) => [room, event]), [[`user:${myId}`, "chat:muted"]]);
+
+  const forever = response();
+  await muteChat(muteRequest({ duration: "forever" }), forever);
+  assert.equal(upsert.mock.calls[1].arguments[1].$set.mutedUntil, null);
+  assert.equal(forever.body.mutedUntil, null);
+});
+
+test("mute requests are validated", async () => {
+  mock.method(ChatMute, "updateOne", () => assert.fail("must not save"));
+
+  for (const body of [{}, { duration: "2h" }, { duration: "1h", extra: true }]) {
+    const res = response();
+    await muteChat(muteRequest(body), res);
+    assert.equal(res.statusCode, 400);
+  }
+  const self = response();
+  await muteChat(muteRequest({ duration: "1h" }, myId), self);
+  assert.equal(self.statusCode, 400);
+});
+
+test("unmuting removes the mute and tells only my own tabs", async () => {
+  const remove = mock.method(ChatMute, "deleteOne", () => Promise.resolve({ deletedCount: 1 }));
+  const events = trackSocketEvents();
+
+  const res = response();
+  await unmuteChat(muteRequest(undefined), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(remove.mock.calls[0].arguments[0], { userId: myId, peerId: partnerId });
+  assert.deepEqual(events.map(({ room, event }) => [room, event]), [[`user:${myId}`, "chat:unmuted"]]);
+});
+
+test("the chat list carries the mutes still in force", async () => {
+  const until = new Date(Date.now() + 3600 * 1000);
+  mutes = [
+    { peerId: partnerId, mutedUntil: until },
+    { peerId: quietPartnerId, mutedUntil: null },
+  ];
+  let filter;
+  ChatMute.find.mock.mockImplementation((query) => {
+    filter = query;
+    return leanQuery(mutes);
+  });
+  mock.method(Message, "aggregate", () => Promise.resolve([]));
+
+  const res = response();
+  await getChats({ user: { _id: myId }, requestId: "req-7" }, res);
+
+  assert.deepEqual(res.body.mutes, { [partnerId]: until.toISOString(), [quietPartnerId]: null });
+  // Ended mutes are left out even before the TTL index removes them.
+  assert.ok(filter.$or.some((rule) => rule.mutedUntil?.$gt instanceof Date));
 });

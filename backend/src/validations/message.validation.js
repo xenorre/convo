@@ -14,3 +14,9 @@ export const messageDeleteQuerySchema = z
     for: z.enum(["me", "everyone"]).default("me"),
   })
   .strict();
+
+export const chatMuteSchema = z
+  .object({
+    duration: z.enum(["1h", "8h", "24h", "forever"]),
+  })
+  .strict();

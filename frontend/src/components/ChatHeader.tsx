@@ -1,11 +1,13 @@
-import { ArrowLeftIcon, UserRoundIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, BellOffIcon, UserRoundIcon, XIcon } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import ConversationMenu from "./friends/ConversationMenu";
+import { describeMute, isChatMuted } from "@/utils/chatMute";
 
 function ChatHeader() {
-  const { selectedUser, setSelectedUser } = useChatStore();
+  const { selectedUser, setSelectedUser, mutes } = useChatStore();
+  const isMuted = selectedUser ? isChatMuted(mutes, String(selectedUser._id)) : false;
   const { onlineUsers } = useAuthStore();
 
   const isOnline = selectedUser
@@ -54,9 +56,20 @@ function ChatHeader() {
         </div>
 
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold text-slate-100 sm:text-base">
-            {selectedUser?.fullName}
-          </h1>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <h1 className="truncate text-sm font-semibold text-slate-100 sm:text-base">
+              {selectedUser?.fullName}
+            </h1>
+            {isMuted && selectedUser && (
+              <BellOffIcon
+                className="size-3.5 shrink-0 text-slate-400"
+                role="img"
+                aria-label={describeMute(mutes[String(selectedUser._id)])}
+              >
+                <title>{describeMute(mutes[String(selectedUser._id)])}</title>
+              </BellOffIcon>
+            )}
+          </div>
           <p
             className={`mt-0.5 text-xs ${isOnline ? "text-cyan-400" : "text-slate-400"}`}
           >

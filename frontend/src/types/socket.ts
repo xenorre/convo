@@ -13,6 +13,8 @@ export interface ServerToClientEvents {
   'friend:request:removed': (data: { friendRequestId: string }) => void;
   'friend:removed': (data: { userId: string }) => void;
   'chat:deleted': (data: { userId: string; deletedBefore: string }) => void;
+  'chat:muted': (data: { userId: string; mutedUntil: string | null }) => void;
+  'chat:unmuted': (data: { userId: string }) => void;
   'message:updated': (data: { message: Message }) => void;
   'message:deleted': (data: { message: Message; wasUnread: boolean }) => void;
   'message:hidden': (data: { messageId: string; peerId: string }) => void;

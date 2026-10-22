@@ -4,6 +4,8 @@ import {
   editMessage,
   getChats,
   getMessagesById,
+  muteChat,
+  unmuteChat,
   sendMessage,
   markRead,
 } from "#src/controllers/message.controller.js";
@@ -28,6 +30,9 @@ router.delete(
   rateLimitPerUser({ windowMs: 10 * 60 * 1000, max: 30 }),
   deleteChat
 );
+const muteLimit = rateLimitPerUser({ windowMs: 60 * 1000, max: 30 });
+router.put("/chats/:id/mute", validateObjectIdParam("id"), muteLimit, muteChat);
+router.delete("/chats/:id/mute", validateObjectIdParam("id"), muteLimit, unmuteChat);
 router.get("/:id", validateObjectIdParam("id"), getMessagesById);
 
 // A single message, by its own ID (the routes above take a user ID).

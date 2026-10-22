@@ -565,3 +565,71 @@ describe('messages changed elsewhere', () => {
     expect(useChatStore.getState().selectedUser).toEqual(sender);
   });
 });
+
+describe('muted chats', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiService.post).mockResolvedValue({});
+    useChatStore.setState(useChatStore.getInitialState(), true);
+    useAuthStore.setState({
+      ...useAuthStore.getInitialState(),
+      authUser: { _id: 'my-id', fullName: 'Current User', email: 'current@example.com', profilePic: '' },
+      socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
+    }, true);
+  });
+
+  const inAnHour = () => new Date(Date.now() + 3600 * 1000).toISOString();
+
+  it('a muted chat still counts the message but stays quiet', () => {
+    useChatStore.setState({ chats: [{ ...sender }], mutes: { [sender._id]: null } });
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message, sender });
+
+    expect(useChatStore.getState().unreadCounts[sender._id]).toBe(1);
+    expect(notifyIncomingMessage).not.toHaveBeenCalled();
+  });
+
+  it('a mute that has ended no longer silences', () => {
+    useChatStore.setState({ chats: [{ ...sender }], mutes: { [sender._id]: '2020-01-01T00:00:00.000Z' } });
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message, sender });
+
+    expect(notifyIncomingMessage).toHaveBeenCalledOnce();
+  });
+
+  it('loads mutes with the chat list', async () => {
+    const until = inAnHour();
+    vi.mocked(apiService.get).mockResolvedValue({ chats: [], unreadCounts: {}, mutes: { [sender._id]: until } });
+
+    await useChatStore.getState().getMyChatPartners();
+
+    expect(useChatStore.getState().mutes).toEqual({ [sender._id]: until });
+  });
+
+  it('follows mutes changed in another tab', () => {
+    useChatStore.getState().bindSocketOnce();
+    const on = (event: string) => socketOn.mock.calls.filter(([name]) => name === event).at(-1)![1];
+
+    on('chat:muted')({ userId: sender._id, mutedUntil: null });
+    expect(useChatStore.getState().mutes).toEqual({ [sender._id]: null });
+
+    on('chat:unmuted')({ userId: sender._id });
+    expect(useChatStore.getState().mutes).toEqual({});
+  });
+
+  it('a timed mute leaves the list when it ends', () => {
+    vi.useFakeTimers();
+    try {
+      useChatStore.setState({ mutes: { [sender._id]: new Date(Date.now() + 1000).toISOString(), other: null } });
+
+      vi.advanceTimersByTime(999);
+      expect(sender._id in useChatStore.getState().mutes).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(useChatStore.getState().mutes).toEqual({ other: null });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
