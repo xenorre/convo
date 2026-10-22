@@ -9,7 +9,7 @@ import { createApiError, handleStoreError } from "@/utils/errorHandling";
 import { notifyIncomingMessage } from "@/utils/messageNotifications";
 import { isWindowInView } from "@/utils/windowAttention";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
-import type { ChatLastMessage, ChatsResponse, MessagesResponse } from "@/types/api";
+import type { ChatLastMessage, ChatsResponse, DeleteChatResponse, MessagesResponse } from "@/types/api";
 import { useFriendsStore } from "./useFriendsStore";
 
 // Normalize messages coming from various sources (REST/socket) to ensure
@@ -73,6 +73,24 @@ const withLatestMessage = (chats: ChatSummary[], partner: Contact, message: Mess
     .sort((a, b) => lastActivity(b) - lastActivity(a));
 };
 
+// Takes a deleted chat out of the list and closes it if it is open.
+const withoutChat = (state: ChatStore, userId: string, deletedBefore: string): Partial<ChatStore> => {
+  const unreadCounts = { ...state.unreadCounts };
+  delete unreadCounts[userId];
+  const isOpen = String(state.selectedUser?._id) === userId;
+  return {
+    chats: state.chats.filter((chat) => String(chat._id) !== userId),
+    unreadCounts,
+    deletedChats: { ...state.deletedChats, [userId]: deletedBefore },
+    ...(isOpen && { selectedUser: null, messages: [] }),
+  };
+};
+
+const isDeletedMessage = (deletedChats: Record<string, string>, partnerId: string, message: Message) => {
+  const deletedBefore = deletedChats[partnerId];
+  return Boolean(deletedBefore) && Date.parse(message.createdAt) <= Date.parse(deletedBefore);
+};
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   chats: [],
   unreadCounts: {},
@@ -83,6 +101,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   selectedUser: null,
   isConversationVisible: false,
   messagingRevision: 0,
+  deletedChats: {},
   isUsersLoading: false,
   isMessagesLoading: false,
   socketBound: false,
@@ -158,6 +177,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }));
     } catch (e) {
       // Non-fatal; ignore errors
+    }
+  },
+
+  deleteChat: async (user) => {
+    const sessionVersion = getAuthSessionVersion();
+    try {
+      const { deletedBefore } = await apiService.delete<DeleteChatResponse>(`/messages/chats/${user._id}`);
+      if (!isCurrentAuthSession(sessionVersion)) return false;
+      set((state) => withoutChat(state, String(user._id), deletedBefore));
+      toast.success(`Deleted your chat with ${user.fullName}`);
+      return true;
+    } catch (e) {
+      if (isCurrentAuthSession(sessionVersion)) {
+        const apiError = createApiError(e);
+        handleStoreError(e, apiError.status === 429 ? apiError.message : "Couldn't delete the chat. Try again later.");
+      }
+      return false;
     }
   },
 
@@ -275,6 +311,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const actualMessage = normalizeMessage(raw);
 
       const state = get();
+      if (isDeletedMessage(state.deletedChats, actualMessage.senderId, actualMessage)) return;
       const currentMessages = state.messages;
       const selectedUser = state.selectedUser;
       const chats = state.chats;
@@ -355,14 +392,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       hasConnected = true;
     };
 
+    // The same chat deleted in another tab.
+    const onChatDeleted = ({ userId, deletedBefore }: { userId: string; deletedBefore: string }) => {
+      if (!isActiveSocket()) return;
+      set((state) => withoutChat(state, String(userId), deletedBefore));
+    };
+
     socket.on("newMessage", onMessage);
     socket.on("connect", onConnect);
+    socket.on("chat:deleted", onChatDeleted);
     set({
       socketBound: true,
       boundSocket: socket,
       unbindSocket: () => {
         socket.off("newMessage", onMessage);
         socket.off("connect", onConnect);
+        socket.off("chat:deleted", onChatDeleted);
       },
     });
   },

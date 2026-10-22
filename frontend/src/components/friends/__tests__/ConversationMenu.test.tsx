@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { apiService } from '@/services/apiService';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -146,5 +146,92 @@ describe('Conversation menu and blocked conversations', () => {
     await act(async () => useChatStore.setState((state) => ({ messagingRevision: state.messagingRevision + 1 })));
 
     expect(await screen.findByText("Only Sam Stranger's friends can message them.")).toBeInTheDocument();
+  });
+
+  describe('deleting the chat', () => {
+    const openDeleteDialog = async (user: ReturnType<typeof userEvent.setup>) => {
+      useChatStore.setState({ chats: [{ ...stranger }], unreadCounts: { sam: 2 } });
+      await openMenu(user);
+      await user.click(screen.getByRole('button', { name: 'Delete chat' }));
+    };
+
+    it('asks twice before deleting, and closes the conversation once it is gone', async () => {
+      const user = userEvent.setup();
+      vi.mocked(apiService.delete).mockResolvedValue({ userId: 'sam', deletedBefore: '2026-10-22T10:00:00.000Z' });
+      await openDeleteDialog(user);
+
+      const first = screen.getByRole('alertdialog', { name: 'Delete this chat?' });
+      expect(first).toHaveTextContent('Sam Stranger keeps their copy');
+      await user.click(within(first).getByRole('button', { name: 'Delete chat' }));
+      expect(apiService.delete).not.toHaveBeenCalled();
+
+      const final = screen.getByRole('alertdialog', { name: 'Delete forever?' });
+      expect(within(final).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+      // A second click right away (a double click) can't confirm.
+      const deleteForever = within(final).getByRole('button', { name: 'Delete forever' });
+      expect(deleteForever).toBeDisabled();
+      await waitFor(() => expect(deleteForever).toBeEnabled());
+      await user.click(deleteForever);
+
+      expect(apiService.delete).toHaveBeenCalledWith('/messages/chats/sam');
+      const state = useChatStore.getState();
+      expect(state.selectedUser).toBeNull();
+      expect(state.chats).toEqual([]);
+      expect(state.unreadCounts).toEqual({});
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+    });
+
+    it('deletes nothing when either step is cancelled', async () => {
+      const user = userEvent.setup();
+      await openDeleteDialog(user);
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(screen.getByRole('button', { name: 'More actions for Sam Stranger' })).toHaveFocus();
+
+      await user.click(screen.getByRole('button', { name: 'More actions for Sam Stranger' }));
+      await user.click(screen.getByRole('button', { name: 'Delete chat' }));
+      await user.click(screen.getByRole('button', { name: 'Delete chat' }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(apiService.delete).not.toHaveBeenCalled();
+      expect(useChatStore.getState().selectedUser).toEqual(stranger);
+    });
+
+    it('Escape cancels the dialog without closing the conversation', async () => {
+      const user = userEvent.setup();
+      await openDeleteDialog(user);
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      expect(useChatStore.getState().selectedUser).toEqual(stranger);
+      expect(apiService.delete).not.toHaveBeenCalled();
+    });
+
+    it('keeps focus inside the dialog', async () => {
+      const user = userEvent.setup();
+      await openDeleteDialog(user);
+      const dialog = screen.getByRole('alertdialog');
+
+      await user.tab();
+      expect(within(dialog).getByRole('button', { name: 'Delete chat' })).toHaveFocus();
+      await user.tab();
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    });
+
+    it('keeps the chat when the server fails, and says so', async () => {
+      const user = userEvent.setup();
+      vi.mocked(apiService.delete).mockRejectedValue({ response: { status: 500, data: {} } });
+      await openDeleteDialog(user);
+      await user.click(screen.getByRole('button', { name: 'Delete chat' }));
+      const deleteForever = screen.getByRole('button', { name: 'Delete forever' });
+      await waitFor(() => expect(deleteForever).toBeEnabled());
+      await user.click(deleteForever);
+
+      expect(useChatStore.getState().selectedUser).toEqual(stranger);
+      expect(useChatStore.getState().chats).toHaveLength(1);
+      expect(screen.getByRole('alertdialog', { name: 'Delete forever?' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Delete forever' })).toBeEnabled();
+    });
   });
 });

@@ -2,7 +2,12 @@ import Message from "#src/models/message.model.js";
 import User from "#src/models/user.model.js";
 import { messagePermission } from "#src/services/privacy.service.js";
 import { uploadMessageFile } from "#src/services/storage.service.js";
-import { getChatSummaries } from "#src/services/chat.service.js";
+import {
+  CHAT_ERRORS,
+  deleteChatForUser,
+  getChatDeletedBefore,
+  getChatSummaries,
+} from "#src/services/chat.service.js";
 import logger from "#src/config/logger.js";
 import { io } from "#src/config/socket.js";
 
@@ -11,6 +16,8 @@ export const getMessagesById = async (req, res) => {
     const myId = req.user._id;
     const { id: userToChatId } = req.params;
 
+    // A chat deleted earlier only shows what came after.
+    const deletedBefore = await getChatDeletedBefore(myId, userToChatId);
     const message = await Message.find({
       $or: [
         {
@@ -22,6 +29,7 @@ export const getMessagesById = async (req, res) => {
           receiverId: myId,
         },
       ],
+      ...(deletedBefore && { createdAt: { $gt: deletedBefore } }),
     })
       // Without an explicit sort MongoDB returns index order, not chronology.
       .sort({ createdAt: 1, _id: 1 });
@@ -164,5 +172,26 @@ export const getChats = async (req, res) => {
     res
       .status(500)
       .json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+export const deleteChat = async (req, res) => {
+  try {
+    const myId = req.user._id;
+    const { id: peerId } = req.params;
+    const { deletedBefore, purged } = await deleteChatForUser(myId, peerId);
+
+    logger.info("Chat deleted", { userId: myId, peerId, purged, requestId: req.requestId });
+
+    // The user's other tabs drop it too; the other person is not told.
+    io.to(`user:${myId}`).emit("chat:deleted", { userId: peerId, deletedBefore });
+
+    res.status(200).json({ userId: peerId, deletedBefore, requestId: req.requestId });
+  } catch (e) {
+    if (e.message === CHAT_ERRORS.SELF) {
+      return res.status(400).json({ error: "You can't delete a chat with yourself", requestId: req.requestId });
+    }
+    logger.error("Failed to delete chat", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
   }
 };

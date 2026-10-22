@@ -55,6 +55,13 @@ export interface ChatsResponse {
   requestId: string;
 }
 
+export interface DeleteChatResponse {
+  userId: string;
+  // Messages up to this moment are gone for the user who deleted the chat.
+  deletedBefore: string;
+  requestId: string;
+}
+
 export interface MessagesResponse {
   messages: Array<{
     _id: string;

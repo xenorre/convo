@@ -1,4 +1,5 @@
 import {
+  deleteChat,
   getChats,
   getMessagesById,
   sendMessage,
@@ -11,6 +12,7 @@ import {
   validateMessageFile,
 } from "#src/middleware/messageUpload.middleware.js";
 import { validateObjectIdParam } from "#src/middleware/objectId.middleware.js";
+import { rateLimitPerUser } from "#src/middleware/rateLimit.middleware.js";
 import express from "express";
 
 const router = express.Router();
@@ -18,6 +20,12 @@ const router = express.Router();
 router.use(protectRoute);
 
 router.get("/chats", getChats);
+router.delete(
+  "/chats/:id",
+  validateObjectIdParam("id"),
+  rateLimitPerUser({ windowMs: 10 * 60 * 1000, max: 30 }),
+  deleteChat
+);
 router.get("/:id", validateObjectIdParam("id"), getMessagesById);
 router.post("/mark-read/:id", validateObjectIdParam("id"), markRead);
 router.post(

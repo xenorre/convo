@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, afterEach, mock, test } from "node:test";
+import { after, afterEach, beforeEach, mock, test } from "node:test";
 
 // The aggregation itself runs in MongoDB; these tests stub it and never use a
 // developer's DB, Redis, credentials, or outbound email configuration.
@@ -12,13 +12,31 @@ process.env.LOG_TO_FILES = "false";
 
 const { default: mongoose } = await import("mongoose");
 const { default: Message } = await import("../src/models/message.model.js");
+const { default: ChatDeletion } = await import("../src/models/chatDeletion.model.js");
 const { default: logger } = await import("../src/config/logger.js");
 const { buildChatSummariesPipeline, LAST_MESSAGE_PREVIEW_LENGTH } =
   await import("../src/services/chat.service.js");
-const { getChats, getMessagesById } = await import("../src/controllers/message.controller.js");
+const { deleteChat, getChats, getMessagesById } = await import("../src/controllers/message.controller.js");
 const { io } = await import("../src/config/socket.js");
+const { s3Storage } = await import("../src/config/storage.js");
 
 logger.silent = true;
+
+// Query chains end in .lean(); `result` is what the chain resolves to.
+const leanQuery = (result) => {
+  const query = { select: () => query, lean: () => Promise.resolve(result) };
+  return query;
+};
+
+// Every test starts with no deleted chats; the deletion tests replace these.
+let deletions;
+beforeEach(() => {
+  deletions = [];
+  mock.method(ChatDeletion, "find", (filter) =>
+    leanQuery(deletions.filter((d) => !filter.userId || String(d.userId) === String(filter.userId))));
+  mock.method(ChatDeletion, "findOne", ({ userId, peerId }) =>
+    leanQuery(deletions.find((d) => String(d.userId) === String(userId) && String(d.peerId) === String(peerId)) ?? null));
+});
 afterEach(() => mock.restoreAll());
 after(() => io.close());
 
@@ -112,4 +130,117 @@ test("conversation messages are explicitly sorted oldest first", async () => {
 
   assert.deepEqual(sortedBy, { createdAt: 1, _id: 1 });
   assert.deepEqual(res.body, { messages, requestId: "req-4" });
+});
+
+test("messages from a deleted chat are skipped before the list is grouped", async () => {
+  const deletedBefore = new Date("2026-10-20T10:00:00Z");
+  deletions = [{ userId: myId, peerId: partnerId, deletedBefore }];
+  const aggregate = mock.method(Message, "aggregate", () => Promise.resolve([]));
+
+  await getChats({ user: { _id: myId }, requestId: "req-5" }, response());
+
+  const [, skip, sort] = aggregate.mock.calls[0].arguments[0];
+  const [rule] = skip.$match.$nor;
+  assert.equal(String(rule.$or[0].senderId), partnerId);
+  assert.equal(String(rule.$or[1].receiverId), partnerId);
+  assert.deepEqual(rule.createdAt, { $lte: deletedBefore });
+  // Still filtered before the sort, so the indexes are used as before.
+  assert.deepEqual(sort.$sort, { createdAt: -1, _id: -1 });
+});
+
+test("a deleted conversation only loads messages sent after the deletion", async () => {
+  const deletedBefore = new Date("2026-10-20T10:00:00Z");
+  deletions = [{ userId: myId, peerId: partnerId, deletedBefore }];
+  let filter;
+  mock.method(Message, "find", (query) => {
+    filter = query;
+    return { sort: () => Promise.resolve([]) };
+  });
+
+  await getMessagesById({ user: { _id: myId }, params: { id: partnerId }, requestId: "req-6" }, response());
+
+  assert.deepEqual(filter.createdAt, { $gt: deletedBefore });
+});
+
+const deleteRequest = (peer = partnerId) => ({ user: { _id: myId }, params: { id: peer }, requestId: "req-del" });
+
+const trackSocketEvents = () => {
+  const events = [];
+  mock.method(io, "to", (room) => ({ emit: (event, payload) => events.push({ room, event, payload }) }));
+  return events;
+};
+
+test("deleting a chat hides it for me only and tells only my own tabs", async () => {
+  const upsert = mock.method(ChatDeletion, "updateOne", () => Promise.resolve({}));
+  const deleteMany = mock.method(Message, "deleteMany", () => assert.fail("one side deleting must not remove messages"));
+  deletions = [];
+  const events = trackSocketEvents();
+
+  const res = response();
+  await deleteChat(deleteRequest(), res);
+
+  assert.equal(res.statusCode, 200);
+  const [filter, update, options] = upsert.mock.calls[0].arguments;
+  assert.deepEqual(filter, { userId: myId, peerId: partnerId });
+  assert.ok(update.$set.deletedBefore instanceof Date);
+  assert.deepEqual(options, { upsert: true });
+  assert.equal(deleteMany.mock.callCount(), 0);
+  assert.deepEqual(events.map(({ room, event }) => [room, event]), [[`user:${myId}`, "chat:deleted"]]);
+  assert.equal(events[0].payload.userId, partnerId);
+});
+
+test("once both people deleted, what they both deleted is removed with its files", async () => {
+  const theirs = new Date("2026-10-20T10:00:00Z");
+  mock.method(ChatDeletion, "updateOne", (filter, { $set }) => {
+    deletions.push({ ...filter, deletedBefore: $set.deletedBefore });
+    return Promise.resolve({});
+  });
+  deletions = [{ userId: partnerId, peerId: myId, deletedBefore: theirs }];
+  let fileFilter;
+  mock.method(Message, "find", (filter) => {
+    fileFilter = filter;
+    return { distinct: () => Promise.resolve(["https://cdn.test/storage/v1/object/public/bucket/message-files/a.png"]) };
+  });
+  const deleteMany = mock.method(Message, "deleteMany", () => Promise.resolve({ deletedCount: 4 }));
+  const send = mock.method(s3Storage, "send", () => Promise.resolve({}));
+  trackSocketEvents();
+
+  const res = response();
+  await deleteChat(deleteRequest(), res);
+
+  assert.equal(res.statusCode, 200);
+  // Only up to the earlier deletion; they still see what came after it.
+  const [filter] = deleteMany.mock.calls[0].arguments;
+  assert.deepEqual(filter.createdAt, { $lte: theirs });
+  assert.deepEqual(filter.$or.map(({ senderId }) => String(senderId)), [myId, partnerId]);
+  assert.deepEqual(fileFilter.image, { $nin: [null, ""] });
+  assert.equal(send.mock.callCount(), 1);
+  assert.equal(send.mock.calls[0].arguments[0].input.Key, "message-files/a.png");
+});
+
+test("a file that can't be removed from storage doesn't fail the deletion", async () => {
+  mock.method(ChatDeletion, "updateOne", (filter, { $set }) => {
+    deletions.push({ ...filter, deletedBefore: $set.deletedBefore });
+    return Promise.resolve({});
+  });
+  deletions = [{ userId: partnerId, peerId: myId, deletedBefore: new Date("2026-10-20T10:00:00Z") }];
+  mock.method(Message, "find", () => ({ distinct: () => Promise.resolve(["https://cdn.test/storage/v1/object/public/bucket/x.png"]) }));
+  mock.method(Message, "deleteMany", () => Promise.resolve({ deletedCount: 1 }));
+  mock.method(s3Storage, "send", () => Promise.reject(new Error("bucket down")));
+  trackSocketEvents();
+
+  const res = response();
+  await deleteChat(deleteRequest(), res);
+
+  assert.equal(res.statusCode, 200);
+});
+
+test("a chat with yourself can't be deleted", async () => {
+  const upsert = mock.method(ChatDeletion, "updateOne", () => assert.fail("must not save"));
+
+  const res = response();
+  await deleteChat(deleteRequest(myId), res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(upsert.mock.callCount(), 0);
 });

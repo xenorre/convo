@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
+import ChatDeletion from "#src/models/chatDeletion.model.js";
 import Message from "#src/models/message.model.js";
 import User from "#src/models/user.model.js";
+import { deleteFile } from "#src/services/storage.service.js";
+import logger from "#src/config/logger.js";
 
 // Long messages are only needed in full inside the conversation view.
 export const LAST_MESSAGE_PREVIEW_LENGTH = 120;
@@ -10,14 +13,46 @@ const toObjectId = (id) =>
     ? id
     : new mongoose.Types.ObjectId(String(id));
 
+export const CHAT_ERRORS = Object.freeze({
+  SELF: "CHAT_SELF",
+});
+
+// Messages between the two people, in either direction.
+const betweenPair = (a, b) => ({
+  $or: [
+    { senderId: a, receiverId: b },
+    { senderId: b, receiverId: a },
+  ],
+});
+
+// The chats this user deleted, as { peerId, deletedBefore }.
+export const getChatDeletions = (userId) =>
+  ChatDeletion.find({ userId }).select("peerId deletedBefore").lean();
+
+// Messages up to this date are deleted for the user, or null if none are.
+export const getChatDeletedBefore = async (userId, peerId) =>
+  (await ChatDeletion.findOne({ userId, peerId }).select("deletedBefore").lean())?.deletedBefore ?? null;
+
 // One pass over the user's messages, done inside MongoDB: group them by chat
 // partner, keep the newest message and count unread ones, then join the
 // partner's public profile. Nothing but one row per partner leaves the database.
-export const buildChatSummariesPipeline = (userId) => {
+// Messages from chats the user deleted are skipped before anything is grouped.
+export const buildChatSummariesPipeline = (userId, deletions = []) => {
   const myId = toObjectId(userId);
+  const skipDeleted = deletions.length
+    ? [{
+        $match: {
+          $nor: deletions.map(({ peerId, deletedBefore }) => ({
+            $or: [{ senderId: toObjectId(peerId) }, { receiverId: toObjectId(peerId) }],
+            createdAt: { $lte: deletedBefore },
+          })),
+        },
+      }]
+    : [];
 
   return [
     { $match: { $or: [{ senderId: myId }, { receiverId: myId }] } },
+    ...skipDeleted,
     { $sort: { createdAt: -1, _id: -1 } },
     {
       $group: {
@@ -90,7 +125,8 @@ export const buildChatSummariesPipeline = (userId) => {
 
 // Chats come back newest first. unreadCounts keeps the shape clients already use.
 export const getChatSummaries = async (userId) => {
-  const rows = await Message.aggregate(buildChatSummariesPipeline(userId));
+  const deletions = await getChatDeletions(userId);
+  const rows = await Message.aggregate(buildChatSummariesPipeline(userId, deletions));
 
   const unreadCounts = {};
   const chats = rows.map(({ unreadCount, ...chat }) => {
@@ -99,4 +135,42 @@ export const getChatSummaries = async (userId) => {
   });
 
   return { chats, unreadCounts };
+};
+
+// Removes the messages both people deleted, with their attachments. Files go
+// after the documents, so a storage failure leaves an orphaned file at worst,
+// never a message pointing at a missing one.
+const purgeMessagesDeletedByBoth = async (userId, peerId) => {
+  const deletions = await ChatDeletion.find({
+    $or: [
+      { userId, peerId },
+      { userId: peerId, peerId: userId },
+    ],
+  }).lean();
+  if (deletions.length < 2) return 0;
+
+  const cutoff = new Date(Math.min(...deletions.map(({ deletedBefore }) => deletedBefore.getTime())));
+  const filter = { ...betweenPair(userId, peerId), createdAt: { $lte: cutoff } };
+  const files = await Message.find({ ...filter, image: { $nin: [null, ""] } }).distinct("image");
+  const { deletedCount } = await Message.deleteMany(filter);
+
+  const results = await Promise.allSettled(files.map((fileUrl) => deleteFile(fileUrl)));
+  const failed = results.filter(({ status }) => status === "rejected").length;
+  if (failed) logger.warn("Some deleted chat attachments stayed in storage", { failed, total: files.length });
+  return deletedCount;
+};
+
+// Deletes the whole chat history with `peerId` for this user. The other
+// person keeps their copy until they delete the chat too.
+export const deleteChatForUser = async (userId, peerId) => {
+  if (String(userId) === String(peerId)) throw new Error(CHAT_ERRORS.SELF);
+
+  const deletedBefore = new Date();
+  await ChatDeletion.updateOne(
+    { userId, peerId },
+    { $set: { deletedBefore } },
+    { upsert: true }
+  );
+  const purged = await purgeMessagesDeletedByBoth(userId, peerId);
+  return { deletedBefore, purged };
 };

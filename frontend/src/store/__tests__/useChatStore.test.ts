@@ -429,3 +429,64 @@ describe('reading the open conversation', () => {
     expect(isReadingConversation(sender._id)).toBe(false);
   });
 });
+
+describe('deleted chats', () => {
+  const deletedBefore = '2026-10-19T12:30:00.000Z';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiService.post).mockResolvedValue({});
+    useChatStore.setState(useChatStore.getInitialState(), true);
+    useAuthStore.setState({
+      ...useAuthStore.getInitialState(),
+      authUser: { _id: 'my-id', fullName: 'Current User', email: 'current@example.com', profilePic: '' },
+      socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
+    }, true);
+  });
+
+  const deletedInAnotherTab = () => {
+    useChatStore.getState().bindSocketOnce();
+    const subscription = socketOn.mock.calls.find(([event]) => event === 'chat:deleted');
+    expect(subscription).toBeDefined();
+    subscription![1]({ userId: sender._id, deletedBefore });
+  };
+
+  it('a chat deleted in another tab disappears and closes here too', () => {
+    useChatStore.setState({
+      chats: [{ ...sender }],
+      unreadCounts: { [sender._id]: 1 },
+      selectedUser: sender,
+      messages: [message],
+    });
+
+    deletedInAnotherTab();
+
+    const state = useChatStore.getState();
+    expect(state.chats).toEqual([]);
+    expect(state.unreadCounts).toEqual({});
+    expect(state.selectedUser).toBeNull();
+    expect(state.messages).toEqual([]);
+  });
+
+  it('a message from before the deletion that arrives late does not bring the chat back', () => {
+    useChatStore.setState({ chats: [{ ...sender }] });
+    deletedInAnotherTab();
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message, sender });
+
+    expect(useChatStore.getState().chats).toEqual([]);
+    expect(useChatStore.getState().unreadCounts).toEqual({});
+    expect(notifyIncomingMessage).not.toHaveBeenCalled();
+  });
+
+  it('a new message after the deletion starts the chat again', () => {
+    deletedInAnotherTab();
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message: { ...message, _id: 'later', createdAt: '2026-10-19T13:00:00.000Z' }, sender });
+
+    expect(useChatStore.getState().chats.map((chat) => chat._id)).toEqual([sender._id]);
+    expect(useChatStore.getState().unreadCounts).toEqual({ [sender._id]: 1 });
+  });
+});

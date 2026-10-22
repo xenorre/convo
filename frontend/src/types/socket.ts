@@ -12,6 +12,7 @@ export interface ServerToClientEvents {
   'friend:accepted': (data: { friendRequestId: string; friend: Contact }) => void;
   'friend:request:removed': (data: { friendRequestId: string }) => void;
   'friend:removed': (data: { userId: string }) => void;
+  'chat:deleted': (data: { userId: string; deletedBefore: string }) => void;
 }
 
 export interface ClientToServerEvents {

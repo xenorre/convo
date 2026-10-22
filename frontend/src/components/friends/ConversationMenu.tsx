@@ -3,6 +3,7 @@ import { MoreHorizontalIcon } from "lucide-react";
 import { useRelationship } from "@/hooks/useRelationship";
 import { useFriendsStore } from "@/store/useFriendsStore";
 import type { Contact } from "@/types/auth";
+import DeleteChatDialog from "@/components/DeleteChatDialog";
 import BlockConfirm from "./BlockConfirm";
 
 const itemBase =
@@ -10,13 +11,16 @@ const itemBase =
 const itemClass = `${itemBase} text-slate-200`;
 const dangerItemClass = `${itemBase} text-red-300`;
 
-// "⋯" in the conversation header: add friend, block or unblock this person.
+// "⋯" in the conversation header: add friend, block or unblock this person,
+// or delete the chat.
 function ConversationMenu({ user }: { user: Contact }) {
   const { sendRequest, acceptRequest, unblockUser } = useFriendsStore();
   const { state, request } = useRelationship(user._id);
   const [view, setView] = useState<"closed" | "menu" | "block">("closed");
   const [isBusy, setIsBusy] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const container = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
 
   // Closes on a click anywhere else.
@@ -50,6 +54,7 @@ function ConversationMenu({ user }: { user: Contact }) {
   return (
     <div ref={container} className="relative" onKeyDown={onKeyDown}>
       <button
+        ref={trigger}
         type="button"
         aria-label={`More actions for ${user.fullName}`}
         aria-expanded={view !== "closed"}
@@ -93,9 +98,29 @@ function ConversationMenu({ user }: { user: Contact }) {
                   Block
                 </button>
               )}
+              <button
+                type="button"
+                className={dangerItemClass}
+                onClick={() => {
+                  setView("closed");
+                  setIsDeleting(true);
+                }}
+              >
+                Delete chat
+              </button>
             </>
           )}
         </div>
+      )}
+
+      {isDeleting && (
+        <DeleteChatDialog
+          user={user}
+          onClose={() => {
+            setIsDeleting(false);
+            trigger.current?.focus();
+          }}
+        />
       )}
     </div>
   );

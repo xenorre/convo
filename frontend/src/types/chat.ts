@@ -23,6 +23,9 @@ export interface ChatStore {
   // Bumped when the server refuses a message, so the conversation re-checks
   // whether it can still be written in.
   messagingRevision: number;
+  // When each chat deleted in this session was deleted, so a message from
+  // before that which arrives late doesn't bring it back.
+  deletedChats: Record<string, string>;
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
   socketBound: boolean;
@@ -38,6 +41,8 @@ export interface ChatStore {
   getMyChatPartners: () => Promise<void>;
   getMessagesByUserId: (userId: string) => Promise<void>;
   markRead: (userId: string) => Promise<void>;
+  // Deletes the whole history with this person for the current user.
+  deleteChat: (user: Contact) => Promise<boolean>;
   sendMessage: (messageData: {
     text?: string;
     image?: string | null;
