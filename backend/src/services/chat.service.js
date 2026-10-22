@@ -36,7 +36,8 @@ export const getChatDeletedBefore = async (userId, peerId) =>
 // One pass over the user's messages, done inside MongoDB: group them by chat
 // partner, keep the newest message and count unread ones, then join the
 // partner's public profile. Nothing but one row per partner leaves the database.
-// Messages from chats the user deleted are skipped before anything is grouped.
+// Messages from chats the user deleted, or deleted by them one by one, are
+// skipped before anything is grouped.
 export const buildChatSummariesPipeline = (userId, deletions = []) => {
   const myId = toObjectId(userId);
   const skipDeleted = deletions.length
@@ -51,7 +52,7 @@ export const buildChatSummariesPipeline = (userId, deletions = []) => {
     : [];
 
   return [
-    { $match: { $or: [{ senderId: myId }, { receiverId: myId }] } },
+    { $match: { $or: [{ senderId: myId }, { receiverId: myId }], hiddenFor: { $ne: myId } } },
     ...skipDeleted,
     { $sort: { createdAt: -1, _id: -1 } },
     {
@@ -66,6 +67,7 @@ export const buildChatSummariesPipeline = (userId, deletions = []) => {
             text: "$text",
             image: "$image",
             createdAt: "$createdAt",
+            deletedAt: "$deletedAt",
           },
         },
         unreadCount: {
@@ -76,6 +78,8 @@ export const buildChatSummariesPipeline = (userId, deletions = []) => {
                   { $eq: ["$receiverId", myId] },
                   // Older documents may not have readAt at all.
                   { $eq: [{ $ifNull: ["$readAt", null] }, null] },
+                  // A message deleted for everyone no longer waits to be read.
+                  { $eq: [{ $ifNull: ["$deletedAt", null] }, null] },
                 ],
               },
               1,
@@ -117,6 +121,7 @@ export const buildChatSummariesPipeline = (userId, deletions = []) => {
             $gt: [{ $strLenCP: { $ifNull: ["$lastMessage.image", ""] } }, 0],
           },
           createdAt: "$lastMessage.createdAt",
+          deleted: { $ne: [{ $ifNull: ["$lastMessage.deletedAt", null] }, null] },
         },
       },
     },

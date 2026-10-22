@@ -9,7 +9,14 @@ import { createApiError, handleStoreError } from "@/utils/errorHandling";
 import { notifyIncomingMessage } from "@/utils/messageNotifications";
 import { isWindowInView } from "@/utils/windowAttention";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
-import type { ChatLastMessage, ChatsResponse, DeleteChatResponse, MessagesResponse } from "@/types/api";
+import type {
+  ChatLastMessage,
+  ChatsResponse,
+  DeleteChatResponse,
+  HideMessageResponse,
+  MessageChangeResponse,
+  MessagesResponse,
+} from "@/types/api";
 import { useFriendsStore } from "./useFriendsStore";
 
 // Normalize messages coming from various sources (REST/socket) to ensure
@@ -38,6 +45,9 @@ const normalizeMessage = (msg: any): Message => ({
   image: typeof msg.image === "string" ? msg.image : undefined,
   createdAt: typeof msg.createdAt === "string" ? msg.createdAt : new Date().toISOString(),
   updatedAt: typeof msg.updatedAt === "string" ? msg.updatedAt : new Date().toISOString(),
+  // Only on messages that were changed, so ordinary ones keep their shape.
+  ...(typeof msg.editedAt === "string" && { editedAt: msg.editedAt }),
+  ...(typeof msg.deletedAt === "string" && { deletedAt: msg.deletedAt }),
 });
 
 // Same preview length the server uses for the chat list.
@@ -52,6 +62,7 @@ const toLastMessage = (message: Message): ChatLastMessage => ({
   text: Array.from(message.text ?? "").slice(0, LAST_MESSAGE_PREVIEW_LENGTH).join(""),
   hasAttachment: Boolean(message.image),
   createdAt: message.createdAt,
+  ...(message.deletedAt && { deleted: true }),
 });
 
 const lastActivity = (chat: ChatSummary) =>
@@ -84,6 +95,36 @@ const withoutChat = (state: ChatStore, userId: string, deletedBefore: string): P
     deletedChats: { ...state.deletedChats, [userId]: deletedBefore },
     ...(isOpen && { selectedUser: null, messages: [] }),
   };
+};
+
+// Puts an edited or deleted-for-everyone message in place, in the open
+// conversation and in the chat list preview when it is the newest one.
+const withChangedMessage = (state: ChatStore, message: Message): Partial<ChatStore> => ({
+  messages: state.messages.map((msg) => (msg._id === message._id ? message : msg)),
+  chats: state.chats.map((chat) =>
+    chat.lastMessage?._id === message._id ? { ...chat, lastMessage: toLastMessage(message) } : chat,
+  ),
+});
+
+// Takes out a message deleted for this user. When it was the chat's preview,
+// the open conversation knows what comes before it; otherwise the list has to
+// be fetched again (`refetch`).
+const withoutMessage = (state: ChatStore, messageId: string, peerId: string) => {
+  const messages = state.messages.filter((msg) => msg._id !== messageId);
+  const chat = state.chats.find((c) => String(c._id) === peerId);
+  if (chat?.lastMessage?._id !== messageId) return { changes: { messages }, refetch: false };
+  if (String(state.selectedUser?._id) !== peerId) return { changes: { messages }, refetch: true };
+
+  const newest = [...messages].reverse().find((msg) => !msg._id.startsWith("temp-"));
+  const chats = newest
+    ? state.chats.map((c) => (c === chat ? { ...c, lastMessage: toLastMessage(newest) } : c))
+    : state.chats.filter((c) => c !== chat);
+  return { changes: { messages, chats }, refetch: false };
+};
+
+const changeErrorMessage = (error: unknown, fallback: string) => {
+  const apiError = createApiError(error);
+  return apiError.status >= 400 && apiError.status < 500 ? apiError.message : fallback;
 };
 
 const isDeletedMessage = (deletedChats: Record<string, string>, partnerId: string, message: Message) => {
@@ -192,6 +233,45 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (isCurrentAuthSession(sessionVersion)) {
         const apiError = createApiError(e);
         handleStoreError(e, apiError.status === 429 ? apiError.message : "Couldn't delete the chat. Try again later.");
+      }
+      return false;
+    }
+  },
+
+  editMessage: async (messageId, text) => {
+    const sessionVersion = getAuthSessionVersion();
+    try {
+      const { message } = await apiService.patch<MessageChangeResponse>(`/messages/item/${messageId}`, { text });
+      if (!isCurrentAuthSession(sessionVersion)) return false;
+      set((state) => withChangedMessage(state, normalizeMessage(message)));
+      return true;
+    } catch (e) {
+      if (!isCurrentAuthSession(sessionVersion)) return false;
+      handleStoreError(e, changeErrorMessage(e, "Couldn't edit the message. Try again later."));
+      // Refused like a new message would be, so the conversation checks again.
+      if (createApiError(e).status === 403) set((state) => ({ messagingRevision: state.messagingRevision + 1 }));
+      return false;
+    }
+  },
+
+  deleteMessage: async (message, scope) => {
+    const sessionVersion = getAuthSessionVersion();
+    try {
+      if (scope === "everyone") {
+        const response = await apiService.delete<MessageChangeResponse>(`/messages/item/${message._id}?for=everyone`);
+        if (!isCurrentAuthSession(sessionVersion)) return false;
+        set((state) => withChangedMessage(state, normalizeMessage(response.message)));
+      } else {
+        const { messageId, peerId } = await apiService.delete<HideMessageResponse>(`/messages/item/${message._id}?for=me`);
+        if (!isCurrentAuthSession(sessionVersion)) return false;
+        const { changes, refetch } = withoutMessage(get(), messageId, peerId);
+        set(changes);
+        if (refetch) void get().getMyChatPartners();
+      }
+      return true;
+    } catch (e) {
+      if (isCurrentAuthSession(sessionVersion)) {
+        handleStoreError(e, changeErrorMessage(e, "Couldn't delete the message. Try again later."));
       }
       return false;
     }
@@ -398,9 +478,38 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((state) => withoutChat(state, String(userId), deletedBefore));
     };
 
+    const onMessageUpdated = ({ message }: { message: Message }) => {
+      if (!isActiveSocket()) return;
+      set((state) => withChangedMessage(state, normalizeMessage(message)));
+    };
+
+    const onMessageDeleted = ({ message, wasUnread }: { message: Message; wasUnread: boolean }) => {
+      if (!isActiveSocket()) return;
+      const deleted = normalizeMessage(message);
+      set((state) => {
+        const changes = withChangedMessage(state, deleted);
+        // It was counted as unread here; it no longer waits to be read.
+        const myId = String(useAuthStore.getState().authUser?._id);
+        const count = state.unreadCounts[deleted.senderId] || 0;
+        if (!wasUnread || deleted.receiverId !== myId || count === 0) return changes;
+        return { ...changes, unreadCounts: { ...state.unreadCounts, [deleted.senderId]: count - 1 } };
+      });
+    };
+
+    // Deleted for this user in another tab.
+    const onMessageHidden = ({ messageId, peerId }: { messageId: string; peerId: string }) => {
+      if (!isActiveSocket()) return;
+      const { changes, refetch } = withoutMessage(get(), messageId, String(peerId));
+      set(changes);
+      if (refetch) void get().getMyChatPartners();
+    };
+
     socket.on("newMessage", onMessage);
     socket.on("connect", onConnect);
     socket.on("chat:deleted", onChatDeleted);
+    socket.on("message:updated", onMessageUpdated);
+    socket.on("message:deleted", onMessageDeleted);
+    socket.on("message:hidden", onMessageHidden);
     set({
       socketBound: true,
       boundSocket: socket,
@@ -408,6 +517,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         socket.off("newMessage", onMessage);
         socket.off("connect", onConnect);
         socket.off("chat:deleted", onChatDeleted);
+        socket.off("message:updated", onMessageUpdated);
+        socket.off("message:deleted", onMessageDeleted);
+        socket.off("message:hidden", onMessageHidden);
       },
     });
   },

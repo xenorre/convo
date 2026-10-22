@@ -26,8 +26,7 @@ function DeleteChatDialog({ user, onClose }: DeleteChatDialogProps) {
     <ConfirmDialog
       key="ask"
       title="Delete this chat?"
-      confirmLabel="Delete chat"
-      onConfirm={() => setStep("final")}
+      actions={[{ label: "Delete chat", onSelect: () => setStep("final") }]}
       onCancel={onClose}
     >
       <p>
@@ -44,10 +43,8 @@ function DeleteChatDialog({ user, onClose }: DeleteChatDialogProps) {
       // "Delete forever" opens where "Delete chat" was; a double click must not answer both.
       confirmDelayMs={600}
       title="Delete forever?"
-      confirmLabel="Delete forever"
-      busyLabel="Deleting…"
+      actions={[{ label: isBusy ? "Deleting…" : "Delete forever", onSelect: confirm }]}
       isBusy={isBusy}
-      onConfirm={confirm}
       onCancel={onClose}
     >
       <p>This can't be undone. You won't be able to get these messages back.</p>

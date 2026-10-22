@@ -13,6 +13,9 @@ export interface ServerToClientEvents {
   'friend:request:removed': (data: { friendRequestId: string }) => void;
   'friend:removed': (data: { userId: string }) => void;
   'chat:deleted': (data: { userId: string; deletedBefore: string }) => void;
+  'message:updated': (data: { message: Message }) => void;
+  'message:deleted': (data: { message: Message; wasUnread: boolean }) => void;
+  'message:hidden': (data: { messageId: string; peerId: string }) => void;
 }
 
 export interface ClientToServerEvents {

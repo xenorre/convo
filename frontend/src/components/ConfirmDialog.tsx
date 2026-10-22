@@ -2,30 +2,32 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { createPortal } from "react-dom";
 import { rowDangerButton, rowSecondaryButton } from "./friends/styles";
 
+export interface ConfirmAction {
+  label: string;
+  onSelect: () => void;
+}
+
 interface ConfirmDialogProps {
   title: string;
   children: ReactNode;
-  confirmLabel: string;
-  busyLabel?: string;
+  // Destructive answers, shown after Cancel.
+  actions: ConfirmAction[];
   isBusy?: boolean;
-  // Keeps the confirm button disabled this long after opening, so a click
-  // meant for an earlier dialog in the same spot can't land on it.
+  // Keeps the answers disabled this long after opening, so a click meant
+  // for an earlier dialog in the same spot can't land on one.
   confirmDelayMs?: number;
-  onConfirm: () => void;
   onCancel: () => void;
 }
 
-// A modal question with a destructive answer. Focus starts on Cancel, stays
+// A modal question with destructive answers. Focus starts on Cancel, stays
 // inside while it is open and goes back to where it was when it closes.
 // Rendered into <body> so no transformed or clipped parent can trap it.
 function ConfirmDialog({
   title,
   children,
-  confirmLabel,
-  busyLabel,
+  actions,
   isBusy = false,
   confirmDelayMs = 0,
-  onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   const [isArmed, setIsArmed] = useState(confirmDelayMs === 0);
@@ -48,6 +50,19 @@ function ConfirmDialog({
     const timer = window.setTimeout(() => setIsArmed(true), confirmDelayMs);
     return () => window.clearTimeout(timer);
   }, [isArmed, confirmDelayMs]);
+
+  const isChoice = actions.length > 1;
+  const cancel = (
+    <button
+      ref={cancelButton}
+      type="button"
+      className={`${rowSecondaryButton} ${isChoice ? "w-full" : ""}`}
+      disabled={isBusy}
+      onClick={onCancel}
+    >
+      Cancel
+    </button>
+  );
 
   const onKeyDown = (event: KeyboardEvent) => {
     // Escape answers this dialog only, never closes the conversation behind it.
@@ -92,13 +107,22 @@ function ConfirmDialog({
         <div id={descriptionId} className="mt-2 space-y-2 text-sm leading-relaxed text-slate-300">
           {children}
         </div>
-        <div className="mt-5 flex flex-wrap justify-end gap-2">
-          <button ref={cancelButton} type="button" className={rowSecondaryButton} disabled={isBusy} onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="button" className={rowDangerButton} disabled={isBusy || !isArmed} onClick={onConfirm}>
-            {isBusy && busyLabel ? busyLabel : confirmLabel}
-          </button>
+        {/* One answer sits next to Cancel; several stack, with Cancel last. */}
+        <div className={`mt-5 flex gap-2 ${isChoice ? "flex-col" : "flex-wrap justify-end"}`}>
+          {!isChoice && cancel}
+          {actions.map(({ label, onSelect }, index) => (
+            <button
+              // By position, so a label changing to "Deleting…" keeps the same button.
+              key={index}
+              type="button"
+              className={`${rowDangerButton} ${isChoice ? "w-full" : ""}`}
+              disabled={isBusy || !isArmed}
+              onClick={onSelect}
+            >
+              {label}
+            </button>
+          ))}
+          {isChoice && cancel}
         </div>
       </div>
     </div>,

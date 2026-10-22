@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { formatMessageTime } from "@/utils/chatTimestamp";
+import MessageBubble from "./messages/MessageBubble";
 import { onWindowReturn } from "@/utils/windowAttention";
 import { useFriendsStore } from "@/store/useFriendsStore";
 import BlockedConversationNotice from "./friends/BlockedConversationNotice";
@@ -73,59 +73,34 @@ function ChatContainer() {
     });
   }, [selectedUser?._id, markRead, isReadingConversation]);
 
+  // Follows new messages only; an edit or a deletion further up stays in view.
+  const lastMessageId = messages.at(-1)?._id;
   useEffect(() => {
     const container = messagesRef.current;
     container?.scrollTo({
       top: container.scrollHeight,
       behavior: prefersReducedMotion ? "instant" : "smooth",
     });
-  }, [messages, prefersReducedMotion]);
+  }, [lastMessageId, prefersReducedMotion]);
 
   return (
     <>
       <ChatHeader />
       <div
         ref={messagesRef}
+        data-message-list
         className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 sm:py-6"
       >
         {messages.length > 0 && !isMessagesLoading ? (
           <div className="mx-auto w-full max-w-3xl space-y-4 sm:space-y-5">
-            {messages.map((msg) => {
-              const myId = authUser?._id ? String(authUser._id) : "";
-              const isMyMessage = String(msg.senderId) === myId;
-              return (
-                <div
-                  key={msg._id}
-                  className={`chat min-w-0 ${isMyMessage ? "chat-end" : "chat-start"}`}
-                >
-                  <div
-                    className={`chat-bubble relative min-w-0 max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed [overflow-wrap:anywhere] sm:max-w-[80%] ${
-                      isMyMessage
-                        ? "bg-cyan-700 text-white"
-                        : "border border-slate-700/50 bg-slate-800 text-slate-200"
-                    }`}
-                  >
-                    {msg.image && (
-                      <img
-                        src={msg.image}
-                        alt="Shared"
-                        className="h-40 max-w-full rounded-xl object-cover sm:h-48"
-                      />
-                    )}
-                    {msg.text && (
-                      <p
-                        className={`${msg.image ? "mt-2" : ""} whitespace-pre-wrap`}
-                      >
-                        {msg.text}
-                      </p>
-                    )}
-                    <p className="mt-1.5 text-right text-[10px] leading-none opacity-65">
-                      {formatMessageTime(msg.createdAt || new Date())}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
+            {messages.map((msg) => (
+              <MessageBubble
+                key={msg._id}
+                message={msg}
+                myId={authUser?._id ? String(authUser._id) : ""}
+                peerName={selectedUser?.fullName || "They"}
+              />
+            ))}
           </div>
         ) : isMessagesLoading ? (
           <MessagesLoadingSkeleton />

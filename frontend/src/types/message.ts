@@ -6,4 +6,10 @@ export interface Message {
   image?: string;
   createdAt: string;
   updatedAt: string;
+  // When the sender last changed the text.
+  editedAt?: string | null;
+  // When the sender deleted it for everyone; text and image are gone.
+  deletedAt?: string | null;
 }
+
+export type MessageDeleteScope = "me" | "everyone";

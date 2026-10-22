@@ -1,5 +1,7 @@
 import {
   deleteChat,
+  deleteMessage,
+  editMessage,
   getChats,
   getMessagesById,
   sendMessage,
@@ -27,6 +29,11 @@ router.delete(
   deleteChat
 );
 router.get("/:id", validateObjectIdParam("id"), getMessagesById);
+
+// A single message, by its own ID (the routes above take a user ID).
+const messageChangeLimit = rateLimitPerUser({ windowMs: 60 * 1000, max: 60 });
+router.patch("/item/:id", validateObjectIdParam("id"), messageChangeLimit, editMessage);
+router.delete("/item/:id", validateObjectIdParam("id"), messageChangeLimit, deleteMessage);
 router.post("/mark-read/:id", validateObjectIdParam("id"), markRead);
 router.post(
   "/send/:id",

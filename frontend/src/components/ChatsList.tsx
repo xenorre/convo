@@ -29,17 +29,26 @@ const LastMessagePreview = ({
 }: {
   lastMessage: NonNullable<ChatSummary["lastMessage"]>;
   isMine: boolean;
-}) => (
-  <>
-    {isMine && <span className="shrink-0">You:</span>}
-    {lastMessage.hasAttachment && (
-      <PaperclipIcon className="size-3.5 shrink-0" aria-label="Attachment" />
-    )}
-    <span className="truncate">
-      {lastMessage.text || (lastMessage.hasAttachment ? "Attachment" : "")}
-    </span>
-  </>
-);
+}) => {
+  if (lastMessage.deleted) {
+    return (
+      <span className="truncate italic">
+        {isMine ? "You deleted a message" : "Message deleted"}
+      </span>
+    );
+  }
+  return (
+    <>
+      {isMine && <span className="shrink-0">You:</span>}
+      {lastMessage.hasAttachment && (
+        <PaperclipIcon className="size-3.5 shrink-0" aria-label="Attachment" />
+      )}
+      <span className="truncate">
+        {lastMessage.text || (lastMessage.hasAttachment ? "Attachment" : "")}
+      </span>
+    </>
+  );
+};
 
 const ChatItem = memo(
   ({

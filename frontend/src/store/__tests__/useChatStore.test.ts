@@ -490,3 +490,78 @@ describe('deleted chats', () => {
     expect(useChatStore.getState().unreadCounts).toEqual({ [sender._id]: 1 });
   });
 });
+
+describe('messages changed elsewhere', () => {
+  const preview = (fields: Partial<Message> = {}) => ({
+    ...sender,
+    lastMessage: { _id: message._id, senderId: sender._id, text: message.text!, hasAttachment: false, createdAt: message.createdAt, ...fields },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiService.get).mockResolvedValue({ chats: [], unreadCounts: {} });
+    useChatStore.setState(useChatStore.getInitialState(), true);
+    useAuthStore.setState({
+      ...useAuthStore.getInitialState(),
+      authUser: { _id: 'my-id', fullName: 'Current User', email: 'current@example.com', profilePic: '' },
+      socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
+    }, true);
+  });
+
+  const handler = (event: string) => {
+    useChatStore.getState().bindSocketOnce();
+    const subscription = socketOn.mock.calls.filter(([name]) => name === event).at(-1);
+    expect(subscription).toBeDefined();
+    return subscription![1];
+  };
+
+  it('shows an edit from the sender in the conversation and the chat list', () => {
+    useChatStore.setState({ selectedUser: sender, messages: [message], chats: [preview()] });
+
+    handler('message:updated')({ message: { ...message, text: 'Edited text', editedAt: '2026-10-19T12:05:00.000Z' } });
+
+    const state = useChatStore.getState();
+    expect(state.messages[0]).toMatchObject({ text: 'Edited text', editedAt: '2026-10-19T12:05:00.000Z' });
+    expect(state.chats[0].lastMessage?.text).toBe('Edited text');
+  });
+
+  it('replaces a message deleted for everyone and stops counting it as unread', () => {
+    useChatStore.setState({ chats: [preview()], unreadCounts: { [sender._id]: 2 } });
+
+    handler('message:deleted')({
+      message: { ...message, text: undefined, deletedAt: '2026-10-19T12:05:00.000Z' },
+      wasUnread: true,
+    });
+
+    const state = useChatStore.getState();
+    expect(state.chats[0].lastMessage).toMatchObject({ deleted: true, text: '' });
+    expect(state.unreadCounts[sender._id]).toBe(1);
+  });
+
+  it('a message I deleted in another tab disappears here, refetching the list when its preview is unknown', () => {
+    useChatStore.setState({ chats: [preview()], messages: [] });
+
+    handler('message:hidden')({ messageId: message._id, peerId: sender._id });
+
+    expect(apiService.get).toHaveBeenCalledWith('/messages/chats');
+  });
+
+  it('a hidden message that was not the preview needs no refetch', () => {
+    const older = { ...message, _id: 'older-id', createdAt: '2026-10-19T11:00:00.000Z' };
+    useChatStore.setState({ selectedUser: sender, messages: [older, message], chats: [preview()] });
+
+    handler('message:hidden')({ messageId: older._id, peerId: sender._id });
+
+    expect(useChatStore.getState().messages.map((m) => m._id)).toEqual([message._id]);
+    expect(apiService.get).not.toHaveBeenCalled();
+  });
+
+  it('when the only message left is hidden, the chat leaves the list but stays open', () => {
+    useChatStore.setState({ selectedUser: sender, messages: [message], chats: [preview()] });
+
+    handler('message:hidden')({ messageId: message._id, peerId: sender._id });
+
+    expect(useChatStore.getState().chats).toEqual([]);
+    expect(useChatStore.getState().selectedUser).toEqual(sender);
+  });
+});

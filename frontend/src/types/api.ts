@@ -1,3 +1,5 @@
+import type { Message } from "./message";
+
 // API Response types
 export interface ApiResponse<T = unknown> {
   data?: T;
@@ -25,6 +27,8 @@ export interface ChatLastMessage {
   text: string;
   hasAttachment: boolean;
   createdAt: string;
+  // Deleted for everyone; text is empty.
+  deleted?: boolean;
 }
 
 export interface ChangePasswordRequest {
@@ -52,6 +56,17 @@ export interface ChatsResponse {
     lastMessage: ChatLastMessage;
   }>;
   unreadCounts?: Record<string, number>;
+  requestId: string;
+}
+
+export interface MessageChangeResponse {
+  message: Message;
+  requestId: string;
+}
+
+export interface HideMessageResponse {
+  messageId: string;
+  peerId: string;
   requestId: string;
 }
 

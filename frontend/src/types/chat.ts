@@ -1,5 +1,5 @@
 import type { Contact } from "./auth";
-import type { Message } from "./message";
+import type { Message, MessageDeleteScope } from "./message";
 import type { AppSocket } from "./socket";
 import type { ChatLastMessage } from "./api";
 
@@ -43,6 +43,9 @@ export interface ChatStore {
   markRead: (userId: string) => Promise<void>;
   // Deletes the whole history with this person for the current user.
   deleteChat: (user: Contact) => Promise<boolean>;
+  // The sender's own messages, within the edit window.
+  editMessage: (messageId: string, text: string) => Promise<boolean>;
+  deleteMessage: (message: Message, scope: MessageDeleteScope) => Promise<boolean>;
   sendMessage: (messageData: {
     text?: string;
     image?: string | null;

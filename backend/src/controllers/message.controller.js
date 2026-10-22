@@ -3,6 +3,15 @@ import User from "#src/models/user.model.js";
 import { messagePermission } from "#src/services/privacy.service.js";
 import { uploadMessageFile } from "#src/services/storage.service.js";
 import {
+  MESSAGE_ERRORS,
+  deleteMessageForEveryone,
+  deleteMessageForMe,
+  editMessage as editMessageText,
+  viewersOf,
+} from "#src/services/message.service.js";
+import { messageDeleteQuerySchema, messageEditSchema } from "#validations/message.validation.js";
+import { formatValidationError } from "#src/utils/format.js";
+import {
   CHAT_ERRORS,
   deleteChatForUser,
   getChatDeletedBefore,
@@ -29,6 +38,7 @@ export const getMessagesById = async (req, res) => {
           receiverId: myId,
         },
       ],
+      hiddenFor: { $ne: myId },
       ...(deletedBefore && { createdAt: { $gt: deletedBefore } }),
     })
       // Without an explicit sort MongoDB returns index order, not chronology.
@@ -193,5 +203,77 @@ export const deleteChat = async (req, res) => {
     }
     logger.error("Failed to delete chat", { requestId: req.requestId, error: e.message });
     res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+const MESSAGE_ERROR_RESPONSES = {
+  [MESSAGE_ERRORS.NOT_FOUND]: [404, "Message not found"],
+  [MESSAGE_ERRORS.NOT_SENDER]: [403, "You can only change your own messages"],
+  [MESSAGE_ERRORS.DELETED]: [409, "This message was deleted"],
+  [MESSAGE_ERRORS.EDIT_WINDOW_PASSED]: [409, "Messages can only be edited for 15 minutes after sending"],
+  [MESSAGE_ERRORS.EMPTY]: [400, "A message needs text or a file"],
+  // Same answers as sending, so a block still only gets a generic refusal.
+  [MESSAGE_ERRORS.FRIENDS_ONLY]: [403, "Only their friends can message them"],
+  [MESSAGE_ERRORS.NOT_ALLOWED]: [403, "You can't message this person"],
+};
+
+const sendMessageError = (req, res, e, action) => {
+  const known = MESSAGE_ERROR_RESPONSES[e.message];
+  if (known) {
+    const [status, error] = known;
+    return res.status(status).json({ error, code: e.message, requestId: req.requestId });
+  }
+  logger.error(`Failed to ${action} message`, { requestId: req.requestId, error: e.message });
+  res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+};
+
+const emitToViewers = (message, event, payload) => {
+  for (const userId of viewersOf(message)) io.to(`user:${userId}`).emit(event, payload);
+};
+
+export const editMessage = async (req, res) => {
+  const parsed = messageEditSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Validation failed",
+      details: formatValidationError(parsed.error),
+      requestId: req.requestId,
+    });
+  }
+
+  try {
+    const message = await editMessageText(req.user._id, req.params.id, parsed.data.text);
+    const json = message.toJSON();
+    emitToViewers(message, "message:updated", { message: json });
+    res.status(200).json({ message: json, requestId: req.requestId });
+  } catch (e) {
+    sendMessageError(req, res, e, "edit");
+  }
+};
+
+export const deleteMessage = async (req, res) => {
+  const parsed = messageDeleteQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "Validation failed",
+      details: formatValidationError(parsed.error),
+      requestId: req.requestId,
+    });
+  }
+
+  try {
+    if (parsed.data.for === "everyone") {
+      const { message, wasUnread } = await deleteMessageForEveryone(req.user._id, req.params.id);
+      const json = message.toJSON();
+      emitToViewers(message, "message:deleted", { message: json, wasUnread });
+      return res.status(200).json({ message: json, requestId: req.requestId });
+    }
+
+    const { messageId, peerId } = await deleteMessageForMe(req.user._id, req.params.id);
+    // Only the user's own tabs; the other person is not told.
+    io.to(`user:${req.user._id}`).emit("message:hidden", { messageId, peerId });
+    res.status(200).json({ messageId, peerId, requestId: req.requestId });
+  } catch (e) {
+    sendMessageError(req, res, e, "delete");
   }
 };
