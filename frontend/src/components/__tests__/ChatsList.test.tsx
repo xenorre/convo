@@ -92,4 +92,13 @@ describe('ChatsList', () => {
     expect(within(row).getByRole('img', { name: 'Muted' })).toBeInTheDocument();
     expect(within(row).getByLabelText('2 unread messages')).toHaveClass('text-slate-300');
   });
+
+  it('shows typing in place of the last message', async () => {
+    useChatStore.setState({ typingUsers: { 'anna-id': true } });
+    render(<ChatsList />);
+
+    const row = await screen.findByRole('button', { name: /Anna/ });
+    expect(within(row).getByText('typing…')).toBeInTheDocument();
+    expect(within(row).queryByText('See you at 5')).toBeNull();
+  });
 });

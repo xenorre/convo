@@ -7,6 +7,7 @@ import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import MessageBubble from "./messages/MessageBubble";
+import TypingIndicator from "./messages/TypingIndicator";
 import { MINIMIZED_CONVERSATION_SPACE } from "./MinimizedChats";
 import { onWindowReturn } from "@/utils/windowAttention";
 import { useFriendsStore } from "@/store/useFriendsStore";
@@ -32,6 +33,8 @@ function ChatContainer() {
   );
   const permission = useMessagingPermission(selectedUser?._id);
   const hasMinimizedChats = useChatStore((state) => state.minimizedChats.length > 0);
+  const isPeerTyping = useChatStore((state) =>
+    Boolean(state.selectedUser && state.typingUsers[String(state.selectedUser._id)]));
   const messagesRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -85,6 +88,16 @@ function ChatContainer() {
     });
   }, [lastMessageId, prefersReducedMotion]);
 
+  // Brings the typing bubble into view, unless the user scrolled up to read.
+  useEffect(() => {
+    const container = messagesRef.current;
+    if (!isPeerTyping || !container) return;
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 160;
+    if (nearBottom) {
+      container.scrollTo({ top: container.scrollHeight, behavior: prefersReducedMotion ? "instant" : "smooth" });
+    }
+  }, [isPeerTyping, prefersReducedMotion]);
+
   return (
     <>
       <ChatHeader />
@@ -112,6 +125,11 @@ function ChatContainer() {
           <NoChatHistoryPlaceholder
             name={selectedUser?.fullName || "Unknown"}
           />
+        )}
+        {isPeerTyping && !isMessagesLoading && (
+          <div className="mx-auto mt-4 w-full max-w-3xl sm:mt-5">
+            <TypingIndicator name={selectedUser?.fullName || "They"} />
+          </div>
         )}
       </div>
       {selectedUser && isBlocked ? (

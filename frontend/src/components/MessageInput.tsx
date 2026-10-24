@@ -5,6 +5,7 @@ import { ImageIcon, SendIcon, XIcon } from "lucide-react";
 import { validateMessage, sanitizeInput } from "@/utils/sanitize";
 import { env } from "@/config/env";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
+import { useTypingSignal } from "@/hooks/useTypingSignal";
 
 // Rendered once per conversation (keyed by it), so unsent text stays with
 // the chat it was typed in, including while that chat is minimized.
@@ -16,6 +17,7 @@ function MessageInput() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const typing = useTypingSignal(userId);
   const textRef = useRef(text);
   textRef.current = text;
 
@@ -50,6 +52,7 @@ function MessageInput() {
     // Sanitize and send
     const sanitizedText = trimmedText ? sanitizeInput(trimmedText) : undefined;
 
+    typing.stop();
     sendMessage({
       text: sanitizedText,
       image: imagePreview,
@@ -125,6 +128,7 @@ function MessageInput() {
             const value = e.target.value;
             if (value.length <= env.maxMessageLength) {
               setText(value);
+              typing.onInput(value);
             }
           }}
           className="min-h-11 min-w-0 flex-1 rounded-xl bg-transparent px-2 py-2 text-base text-slate-200 outline-none placeholder:text-slate-500 focus-visible:outline-none sm:px-3"

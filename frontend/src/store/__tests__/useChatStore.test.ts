@@ -704,3 +704,57 @@ describe('hidden and minimized chats', () => {
     expect(useChatStore.getState().drafts).toEqual({});
   });
 });
+
+describe('typing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiService.post).mockResolvedValue({});
+    useChatStore.setState(useChatStore.getInitialState(), true);
+    useAuthStore.setState({
+      ...useAuthStore.getInitialState(),
+      authUser: { _id: 'my-id', fullName: 'Current User', email: 'current@example.com', profilePic: '' },
+      socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
+    }, true);
+  });
+
+  const typingEvent = () => {
+    useChatStore.getState().bindSocketOnce();
+    return socketOn.mock.calls.filter(([name]) => name === 'typing').at(-1)![1];
+  };
+
+  it('shows who is typing until they stop', () => {
+    const onTyping = typingEvent();
+
+    onTyping({ userId: sender._id, isTyping: true });
+    expect(useChatStore.getState().typingUsers).toEqual({ [sender._id]: true });
+
+    onTyping({ userId: sender._id, isTyping: false });
+    expect(useChatStore.getState().typingUsers).toEqual({});
+  });
+
+  it('forgets typing that is not repeated, in case the stop got lost', () => {
+    vi.useFakeTimers();
+    try {
+      const onTyping = typingEvent();
+      onTyping({ userId: sender._id, isTyping: true });
+      vi.advanceTimersByTime(5000);
+      onTyping({ userId: sender._id, isTyping: true });
+      vi.advanceTimersByTime(5999);
+      expect(useChatStore.getState().typingUsers).toEqual({ [sender._id]: true });
+
+      vi.advanceTimersByTime(1);
+      expect(useChatStore.getState().typingUsers).toEqual({});
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('their message arriving ends the typing', () => {
+    const onTyping = typingEvent();
+    onTyping({ userId: sender._id, isTyping: true });
+
+    bindIncomingMessages()({ message, sender });
+
+    expect(useChatStore.getState().typingUsers).toEqual({});
+  });
+});

@@ -7,6 +7,7 @@ import logger from "#config/logger.js";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 import { visibleOnlineUsers } from "#services/privacy.service.js";
+import { createTypingState, relayTyping, stopAllTyping } from "#services/typing.service.js";
 import {
   createSocketRegistry,
   joinActiveSession,
@@ -94,15 +95,19 @@ export const broadcastOnlineUsers = async () => {
   io.emit("getOnlineUsers", await visibleOnlineUsers(users));
 };
 
+const emitToRoom = (room, event, data) => io.to(room).emit(event, data);
+
 io.on("connection", async (socket) => {
   const userId = socket.userId;
   let registered = false;
   let presenceReady = Promise.resolve();
+  const typing = createTypingState();
 
   socket.on("disconnect", async () => {
     logger.info(`User disconnected: ${socket.user.fullName}`);
     if (!registered) return;
     userSockets.remove(userId, socket.id);
+    stopAllTyping(typing, userId, emitToRoom);
 
     try {
       // A disconnect during Redis registration must remove the socket only
@@ -132,6 +137,13 @@ io.on("connection", async (socket) => {
     logger.info(`User connected: ${socket.user.fullName}`);
     userSockets.add(userId, socket.id);
     registered = true;
+
+    // Only a socket whose session checked out may say it is typing.
+    socket.on("typing", (payload) => {
+      relayTyping(typing, userId, payload, emitToRoom).catch((error) =>
+        logger.error("Typing relay failed", { error: error.message })
+      );
+    });
 
     presenceReady = (async () => {
       try {

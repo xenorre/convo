@@ -35,6 +35,8 @@ export interface ChatStore {
   minimizedChats: Contact[];
   // Unsent text per conversation, kept while the user is elsewhere.
   drafts: Record<string, string>;
+  // People typing to the user right now.
+  typingUsers: Record<string, true>;
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
   socketBound: boolean;

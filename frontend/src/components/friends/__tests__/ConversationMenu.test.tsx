@@ -281,4 +281,18 @@ describe('Conversation menu and blocked conversations', () => {
       expect(screen.getByRole('button', { name: /Unmute notifications/ })).toHaveTextContent('Muted until you turn it back on');
     });
   });
+
+  it('shows when the other person is typing, in the header and the conversation', async () => {
+    render(<ChatContainer />);
+    await act(async () => {});
+    expect(screen.queryByText('typing…')).toBeNull();
+
+    await act(async () => useChatStore.setState({ typingUsers: { sam: true } }));
+
+    expect(screen.getByText('typing…')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Sam Stranger is typing' })).toBeInTheDocument();
+
+    await act(async () => useChatStore.setState({ typingUsers: {} }));
+    expect(screen.queryByRole('img', { name: 'Sam Stranger is typing' })).toBeNull();
+  });
 });

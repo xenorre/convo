@@ -59,6 +59,7 @@ const ChatItem = memo(
     isSelected,
     unread,
     isMuted,
+    isTyping,
     onSelect,
   }: {
     chat: ChatSummary;
@@ -67,6 +68,7 @@ const ChatItem = memo(
     isSelected: boolean;
     unread: number;
     isMuted: boolean;
+    isTyping: boolean;
     onSelect: (chat: ChatSummary) => void;
   }) => {
     const handleClick = useCallback(() => onSelect(chat), [chat, onSelect]);
@@ -128,7 +130,9 @@ const ChatItem = memo(
               <p
                 className={`mt-1 flex min-w-0 items-center gap-1 text-xs ${unread > 0 ? "text-slate-300" : "text-slate-400"}`}
               >
-                {lastMessage ? (
+                {isTyping ? (
+                  <span className="truncate italic text-cyan-300">typing…</span>
+                ) : lastMessage ? (
                   <LastMessagePreview
                     lastMessage={lastMessage}
                     isMine={lastMessage.senderId === myId}
@@ -177,6 +181,7 @@ function ChatsList() {
     chats,
     unreadCounts,
     mutes,
+    typingUsers,
     isUsersLoading,
     selectedUser,
     setSelectedUser,
@@ -225,6 +230,7 @@ function ChatsList() {
       isSelected={selectedUser?._id === chat._id}
       unread={unreadCounts[chat._id] || 0}
       isMuted={isChatMuted(mutes, String(chat._id))}
+      isTyping={Boolean(typingUsers[String(chat._id)])}
       onSelect={handleSelectUser}
     />
   );

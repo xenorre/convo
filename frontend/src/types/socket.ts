@@ -20,11 +20,13 @@ export interface ServerToClientEvents {
   'message:updated': (data: { message: Message }) => void;
   'message:deleted': (data: { message: Message; wasUnread: boolean }) => void;
   'message:hidden': (data: { messageId: string; peerId: string }) => void;
+  typing: (data: { userId: string; isTyping: boolean }) => void;
 }
 
 export interface ClientToServerEvents {
   join: (userId: string) => void;
   sendMessage: (data: { text?: string; image?: string; receiverId: string }) => void;
+  typing: (data: { to: string; isTyping: boolean }) => void;
 }
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;

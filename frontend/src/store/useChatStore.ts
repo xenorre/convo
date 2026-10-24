@@ -175,6 +175,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   mutes: {},
   minimizedChats: [],
   drafts: {},
+  typingUsers: {},
   isUsersLoading: false,
   isMessagesLoading: false,
   socketBound: false,
@@ -510,6 +511,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         : newMessage;
       const actualMessage = normalizeMessage(raw);
 
+      // The message they were typing has arrived.
+      if (get().typingUsers[actualMessage.senderId]) setTyping(actualMessage.senderId, false);
       const state = get();
       if (isDeletedMessage(state.deletedChats, actualMessage.senderId, actualMessage)) return;
       const currentMessages = state.messages;
@@ -618,6 +621,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       });
     };
 
+    const onTyping = ({ userId, isTyping }: { userId: string; isTyping: boolean }) => {
+      if (!isActiveSocket()) return;
+      setTyping(String(userId), isTyping);
+    };
+
     // Muted or unmuted in another tab.
     const onChatMuted = ({ userId, mutedUntil }: { userId: string; mutedUntil: string | null }) => {
       if (!isActiveSocket()) return;
@@ -655,6 +663,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     socket.on("chat:muted", onChatMuted);
     socket.on("chat:unmuted", onChatUnmuted);
     socket.on("chat:hidden", onChatHidden);
+    socket.on("typing", onTyping);
     socket.on("chat:unhidden", onChatUnhidden);
     set({
       socketBound: true,
@@ -669,6 +678,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         socket.off("chat:muted", onChatMuted);
         socket.off("chat:unmuted", onChatUnmuted);
         socket.off("chat:hidden", onChatHidden);
+        socket.off("typing", onTyping);
         socket.off("chat:unhidden", onChatUnhidden);
       },
     });
@@ -683,6 +693,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // No-op: global socket handler remains bound for real-time updates
   },
 }));
+
+// "Typing" lasts until the sender says it stopped, or until it has not been
+// repeated for this long (a lost "stop" must not leave it on forever).
+const TYPING_EXPIRES_MS = 6000;
+const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const setTyping = (userId: string, isTyping: boolean) => {
+  clearTimeout(typingTimers.get(userId));
+  typingTimers.delete(userId);
+  const { typingUsers } = useChatStore.getState();
+  if (isTyping) {
+    typingTimers.set(userId, setTimeout(() => setTyping(userId, false), TYPING_EXPIRES_MS));
+    if (!typingUsers[userId]) useChatStore.setState({ typingUsers: { ...typingUsers, [userId]: true } });
+  } else if (typingUsers[userId]) {
+    useChatStore.setState({ typingUsers: withoutKey(typingUsers, userId) });
+  }
+};
+const clearTyping = () => {
+  typingTimers.forEach((timer) => clearTimeout(timer));
+  typingTimers.clear();
+};
 
 // Timed mutes leave the list when they end, so the chat list and header
 // stop showing them without waiting for a reload.
@@ -709,6 +739,7 @@ const unsubscribeMutes = useChatStore.subscribe((state, previous) => {
 // account changes clear private state synchronously, before React can render it.
 const unsubscribeAuth = useAuthStore.subscribe((state, previous) => {
   if (previous.authUser && state.authUser?._id !== previous.authUser._id) {
+    clearTyping();
     useChatStore.getState().resetChat();
   }
   if (state.socket !== previous.socket) {

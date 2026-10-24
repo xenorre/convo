@@ -8,6 +8,7 @@ import { describeMute, isChatMuted } from "@/utils/chatMute";
 function ChatHeader() {
   const { selectedUser, setSelectedUser, mutes, minimizeChat } = useChatStore();
   const isMuted = selectedUser ? isChatMuted(mutes, String(selectedUser._id)) : false;
+  const isTyping = useChatStore((state) => Boolean(selectedUser && state.typingUsers[String(selectedUser._id)]));
   const { onlineUsers } = useAuthStore();
 
   const isOnline = selectedUser
@@ -71,9 +72,9 @@ function ChatHeader() {
             )}
           </div>
           <p
-            className={`mt-0.5 text-xs ${isOnline ? "text-cyan-400" : "text-slate-400"}`}
+            className={`mt-0.5 text-xs ${isTyping || isOnline ? "text-cyan-400" : "text-slate-400"}`}
           >
-            {isOnline ? "Online" : "Offline"}
+            {isTyping ? "typing…" : isOnline ? "Online" : "Offline"}
           </p>
         </div>
       </div>
