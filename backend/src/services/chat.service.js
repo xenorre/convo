@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ChatDeletion from "#src/models/chatDeletion.model.js";
+import ChatHide from "#src/models/chatHide.model.js";
 import ChatMute from "#src/models/chatMute.model.js";
 import Message from "#src/models/message.model.js";
 import User from "#src/models/user.model.js";
@@ -163,15 +164,33 @@ export const unmuteChat = async (userId, peerId) => {
   await ChatMute.deleteOne({ userId, peerId });
 };
 
+// Hiding is undone by the next message, so only the time is stored.
+export const hideChat = async (userId, peerId, now = new Date()) => {
+  if (String(userId) === String(peerId)) throw new Error(CHAT_ERRORS.SELF);
+  await ChatHide.updateOne({ userId, peerId }, { $set: { hiddenAt: now } }, { upsert: true });
+  return { hiddenAt: now };
+};
+
+export const unhideChat = async (userId, peerId) => {
+  await ChatHide.deleteOne({ userId, peerId });
+};
+
 // Chats come back newest first. unreadCounts keeps the shape clients already use.
+// A hidden chat is marked as such until a message newer than the hiding arrives.
 export const getChatSummaries = async (userId) => {
-  const [deletions, mutes] = await Promise.all([getChatDeletions(userId), getActiveMutes(userId)]);
+  const [deletions, mutes, hides] = await Promise.all([
+    getChatDeletions(userId),
+    getActiveMutes(userId),
+    ChatHide.find({ userId }).select("peerId hiddenAt").lean(),
+  ]);
   const rows = await Message.aggregate(buildChatSummariesPipeline(userId, deletions));
+  const hiddenAt = new Map(hides.map(({ peerId, hiddenAt }) => [String(peerId), hiddenAt]));
 
   const unreadCounts = {};
   const chats = rows.map(({ unreadCount, ...chat }) => {
     if (unreadCount > 0) unreadCounts[String(chat._id)] = unreadCount;
-    return chat;
+    const hidden = hiddenAt.get(String(chat._id));
+    return hidden && new Date(chat.lastMessage.createdAt) <= hidden ? { ...chat, hidden: true } : chat;
   });
 
   return { chats, unreadCounts, mutes };

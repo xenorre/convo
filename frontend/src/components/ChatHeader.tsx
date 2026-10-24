@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, BellOffIcon, UserRoundIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, BellOffIcon, MinusIcon, UserRoundIcon, XIcon } from "lucide-react";
 import { useChatStore } from "../store/useChatStore";
 import { useEffect } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -6,7 +6,7 @@ import ConversationMenu from "./friends/ConversationMenu";
 import { describeMute, isChatMuted } from "@/utils/chatMute";
 
 function ChatHeader() {
-  const { selectedUser, setSelectedUser, mutes } = useChatStore();
+  const { selectedUser, setSelectedUser, mutes, minimizeChat } = useChatStore();
   const isMuted = selectedUser ? isChatMuted(mutes, String(selectedUser._id)) : false;
   const { onlineUsers } = useAuthStore();
 
@@ -79,6 +79,15 @@ function ChatHeader() {
       </div>
 
       {selectedUser && <ConversationMenu user={selectedUser} />}
+      <button
+        type="button"
+        aria-label="Minimize conversation"
+        title="Minimize"
+        className="icon-button"
+        onClick={minimizeChat}
+      >
+        <MinusIcon className="size-5" aria-hidden="true" />
+      </button>
       <button
         type="button"
         aria-label="Close conversation"

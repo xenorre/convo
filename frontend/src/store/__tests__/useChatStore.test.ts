@@ -633,3 +633,74 @@ describe('muted chats', () => {
     }
   });
 });
+
+describe('hidden and minimized chats', () => {
+  const other: Contact = { _id: 'other-id', fullName: 'Ola Nowak', profilePic: '' };
+  const third: Contact = { _id: 'third-id', fullName: 'Piotr Lis', profilePic: '' };
+  const fourth: Contact = { _id: 'fourth-id', fullName: 'Rita Kos', profilePic: '' };
+  const fifth: Contact = { _id: 'fifth-id', fullName: 'Szymon Wilk', profilePic: '' };
+  const sixth: Contact = { _id: 'sixth-id', fullName: 'Tola Bies', profilePic: '' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiService.post).mockResolvedValue({});
+    useChatStore.setState(useChatStore.getInitialState(), true);
+    useAuthStore.setState({
+      ...useAuthStore.getInitialState(),
+      authUser: { _id: 'my-id', fullName: 'Current User', email: 'current@example.com', profilePic: '' },
+      socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
+    }, true);
+  });
+
+  it('a new message brings a hidden chat back, a late older one does not', () => {
+    const preview = (createdAt: string) => ({ _id: 'p', senderId: sender._id, text: 'x', hasAttachment: false, createdAt });
+    useChatStore.setState({ chats: [{ ...sender, hidden: true, lastMessage: preview('2026-10-19T12:30:00.000Z') }] });
+    const receiveMessage = bindIncomingMessages();
+
+    receiveMessage({ message, sender });
+    expect(useChatStore.getState().chats[0].hidden).toBe(true);
+
+    receiveMessage({ message: { ...message, _id: 'newer', createdAt: '2026-10-19T13:00:00.000Z' }, sender });
+    expect('hidden' in useChatStore.getState().chats[0]).toBe(false);
+  });
+
+  it('follows chats hidden and unhidden in another tab', () => {
+    useChatStore.setState({ chats: [{ ...sender }], selectedUser: sender });
+    useChatStore.getState().bindSocketOnce();
+    const on = (event: string) => socketOn.mock.calls.filter(([name]) => name === event).at(-1)![1];
+
+    on('chat:hidden')({ userId: sender._id, hiddenAt: '2026-10-19T13:00:00.000Z' });
+    expect(useChatStore.getState().chats[0].hidden).toBe(true);
+    expect(useChatStore.getState().selectedUser).toBeNull();
+
+    on('chat:unhidden')({ userId: sender._id });
+    expect(useChatStore.getState().chats[0].hidden).toBeUndefined();
+  });
+
+  it('keeps at most five minimized chats, newest last, without duplicates', () => {
+    const minimize = (contact: Contact) => {
+      useChatStore.getState().setSelectedUser(contact);
+      useChatStore.getState().minimizeChat();
+    };
+
+    [sender, other, third, other, fourth, fifth, sixth].forEach(minimize);
+
+    expect(useChatStore.getState().minimizedChats.map((c) => c._id))
+      .toEqual([third._id, other._id, fourth._id, fifth._id, sixth._id]);
+    useChatStore.getState().setSelectedUser(other);
+    expect(useChatStore.getState().minimizedChats.map((c) => c._id))
+      .toEqual([third._id, fourth._id, fifth._id, sixth._id]);
+  });
+
+  it('a deleted chat leaves the minimized bar and loses its draft', () => {
+    useChatStore.setState({ minimizedChats: [sender], drafts: { [sender._id]: 'unsent' } });
+    useChatStore.getState().bindSocketOnce();
+    socketOn.mock.calls.filter(([name]) => name === 'chat:deleted').at(-1)![1]({
+      userId: sender._id,
+      deletedBefore: '2026-10-19T13:00:00.000Z',
+    });
+
+    expect(useChatStore.getState().minimizedChats).toEqual([]);
+    expect(useChatStore.getState().drafts).toEqual({});
+  });
+});

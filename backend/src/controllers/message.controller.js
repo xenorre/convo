@@ -16,6 +16,8 @@ import {
   deleteChatForUser,
   getChatDeletedBefore,
   getChatSummaries,
+  hideChat as hideChatFor,
+  unhideChat as unhideChatFor,
   muteChat as muteChatFor,
   unmuteChat as unmuteChatFor,
 } from "#src/services/chat.service.js";
@@ -315,6 +317,34 @@ export const unmuteChat = async (req, res) => {
     res.status(200).json({ userId: peerId, requestId: req.requestId });
   } catch (e) {
     logger.error("Failed to unmute chat", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+// Only the user's own list changes; the other person is never told.
+export const hideChat = async (req, res) => {
+  try {
+    const { id: peerId } = req.params;
+    const { hiddenAt } = await hideChatFor(req.user._id, peerId);
+    io.to(`user:${req.user._id}`).emit("chat:hidden", { userId: peerId, hiddenAt });
+    res.status(200).json({ userId: peerId, hiddenAt, requestId: req.requestId });
+  } catch (e) {
+    if (e.message === CHAT_ERRORS.SELF) {
+      return res.status(400).json({ error: "You can't hide a chat with yourself", requestId: req.requestId });
+    }
+    logger.error("Failed to hide chat", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+export const unhideChat = async (req, res) => {
+  try {
+    const { id: peerId } = req.params;
+    await unhideChatFor(req.user._id, peerId);
+    io.to(`user:${req.user._id}`).emit("chat:unhidden", { userId: peerId });
+    res.status(200).json({ userId: peerId, requestId: req.requestId });
+  } catch (e) {
+    logger.error("Failed to unhide chat", { requestId: req.requestId, error: e.message });
     res.status(500).json({ error: "Internal server error", requestId: req.requestId });
   }
 };

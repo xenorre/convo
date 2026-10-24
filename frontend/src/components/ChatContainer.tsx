@@ -7,6 +7,7 @@ import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import MessageBubble from "./messages/MessageBubble";
+import { MINIMIZED_CONVERSATION_SPACE } from "./MinimizedChats";
 import { onWindowReturn } from "@/utils/windowAttention";
 import { useFriendsStore } from "@/store/useFriendsStore";
 import BlockedConversationNotice from "./friends/BlockedConversationNotice";
@@ -30,6 +31,7 @@ function ChatContainer() {
     state.blocked.some(({ _id }) => _id === selectedUser?._id),
   );
   const permission = useMessagingPermission(selectedUser?._id);
+  const hasMinimizedChats = useChatStore((state) => state.minimizedChats.length > 0);
   const messagesRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -89,7 +91,9 @@ function ChatContainer() {
       <div
         ref={messagesRef}
         data-message-list
-        className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 sm:py-6"
+        className={`min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 sm:py-6 ${
+          hasMinimizedChats ? MINIMIZED_CONVERSATION_SPACE : ""
+        }`}
       >
         {messages.length > 0 && !isMessagesLoading ? (
           <div className="mx-auto w-full max-w-3xl space-y-4 sm:space-y-5">
@@ -115,7 +119,7 @@ function ChatContainer() {
       ) : selectedUser && permission?.canMessage === false ? (
         <MessagingUnavailableNotice user={selectedUser} reason={permission.reason} />
       ) : (
-        <MessageInput />
+        <MessageInput key={selectedUser?._id} />
       )}
     </>
   );

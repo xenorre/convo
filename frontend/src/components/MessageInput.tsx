@@ -1,17 +1,33 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import toast from "react-hot-toast";
 import { ImageIcon, SendIcon, XIcon } from "lucide-react";
 import { validateMessage, sanitizeInput } from "@/utils/sanitize";
 import { env } from "@/config/env";
+import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
 
+// Rendered once per conversation (keyed by it), so unsent text stays with
+// the chat it was typed in, including while that chat is minimized.
 function MessageInput() {
-  const [text, setText] = useState("");
+  const sendMessage = useChatStore((state) => state.sendMessage);
+  const setDraft = useChatStore((state) => state.setDraft);
+  const userId = useChatStore((state) => state.selectedUser?._id);
+  const [text, setText] = useState(() => (userId && useChatStore.getState().drafts[userId]) || "");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textRef = useRef(text);
+  textRef.current = text;
 
-  const { sendMessage } = useChatStore();
+  // Saved when leaving the conversation rather than on every keystroke, and
+  // never into the next account's session after a logout.
+  useEffect(() => {
+    if (!userId) return;
+    const sessionVersion = getAuthSessionVersion();
+    return () => {
+      if (isCurrentAuthSession(sessionVersion)) setDraft(userId, textRef.current);
+    };
+  }, [userId, setDraft]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();

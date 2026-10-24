@@ -13,12 +13,14 @@ const itemBase =
 const itemClass = `${itemBase} text-slate-200`;
 const dangerItemClass = `${itemBase} text-red-300`;
 
-// "⋯" in the conversation header: add friend, mute, block or unblock this
-// person, or delete the chat.
+// "⋯" in the conversation header: add friend, mute, hide, block or unblock
+// this person, or delete the chat.
 function ConversationMenu({ user }: { user: Contact }) {
   const { sendRequest, acceptRequest, unblockUser } = useFriendsStore();
   const { state, request } = useRelationship(user._id);
-  const { mutes, muteChat, unmuteChat } = useChatStore();
+  const { mutes, muteChat, unmuteChat, chats, hideChat, unhideChat } = useChatStore();
+  // Only a chat in the list can be hidden from it.
+  const chat = chats.find(({ _id }) => String(_id) === String(user._id));
   const isMuted = isChatMuted(mutes, String(user._id));
   const [view, setView] = useState<"closed" | "menu" | "block" | "mute">("closed");
   const [isBusy, setIsBusy] = useState(false);
@@ -135,6 +137,16 @@ function ConversationMenu({ user }: { user: Contact }) {
               ) : (
                 <button type="button" className={itemClass} onClick={() => setView("mute")}>
                   Mute notifications
+                </button>
+              )}
+              {chat && (
+                <button
+                  type="button"
+                  className={itemClass}
+                  disabled={isBusy}
+                  onClick={() => run(() => (chat.hidden ? unhideChat(user) : hideChat(user)))}
+                >
+                  {chat.hidden ? "Unhide chat" : "Hide chat"}
                 </button>
               )}
               {state === "blocked" ? (

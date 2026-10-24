@@ -9,6 +9,8 @@ interface TwoPanelLayoutProps {
   contentLabel: string;
   // Below md only one panel fits, so the content replaces the sidebar.
   showContent: boolean;
+  // Floats above both panels, positioned by itself (e.g. minimized chats).
+  overlay?: ReactNode;
 }
 
 // Shell shared by the chats and settings screens: a list on the left and
@@ -19,6 +21,7 @@ function TwoPanelLayout({
   content,
   contentLabel,
   showContent,
+  overlay,
 }: TwoPanelLayoutProps) {
   return (
     <div className="chat-layout relative w-full min-w-0 max-w-6xl">
@@ -42,6 +45,7 @@ function TwoPanelLayout({
           </div>
         </div>
       </BorderAnimatedContainer>
+      {overlay}
     </div>
   );
 }

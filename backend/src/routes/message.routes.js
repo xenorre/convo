@@ -4,6 +4,8 @@ import {
   editMessage,
   getChats,
   getMessagesById,
+  hideChat,
+  unhideChat,
   muteChat,
   unmuteChat,
   sendMessage,
@@ -30,9 +32,12 @@ router.delete(
   rateLimitPerUser({ windowMs: 10 * 60 * 1000, max: 30 }),
   deleteChat
 );
-const muteLimit = rateLimitPerUser({ windowMs: 60 * 1000, max: 30 });
-router.put("/chats/:id/mute", validateObjectIdParam("id"), muteLimit, muteChat);
-router.delete("/chats/:id/mute", validateObjectIdParam("id"), muteLimit, unmuteChat);
+// Muting and hiding share one limit.
+const chatSettingsLimit = rateLimitPerUser({ windowMs: 60 * 1000, max: 30 });
+router.put("/chats/:id/mute", validateObjectIdParam("id"), chatSettingsLimit, muteChat);
+router.delete("/chats/:id/mute", validateObjectIdParam("id"), chatSettingsLimit, unmuteChat);
+router.put("/chats/:id/hide", validateObjectIdParam("id"), chatSettingsLimit, hideChat);
+router.delete("/chats/:id/hide", validateObjectIdParam("id"), chatSettingsLimit, unhideChat);
 router.get("/:id", validateObjectIdParam("id"), getMessagesById);
 
 // A single message, by its own ID (the routes above take a user ID).

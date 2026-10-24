@@ -70,17 +70,26 @@ const toLastMessage = (message: Message): ChatLastMessage => ({
 const lastActivity = (chat: ChatSummary) =>
   chat.lastMessage ? Date.parse(chat.lastMessage.createdAt) || 0 : 0;
 
+const withHidden = (chat: ChatSummary, hidden: boolean): ChatSummary => {
+  const updated = { ...chat };
+  if (hidden) updated.hidden = true;
+  else delete updated.hidden;
+  return updated;
+};
+
 // Moves the partner's conversation to where its newest message belongs,
-// adding it when it is new. A message delivered late never replaces a newer preview.
+// adding it when it is new. A message delivered late never replaces a newer
+// preview; a new one brings a hidden chat back.
 const withLatestMessage = (chats: ChatSummary[], partner: Contact, message: Message): ChatSummary[] => {
   const partnerId = String(partner._id);
   const existing = chats.find((chat) => String(chat._id) === partnerId);
   const incoming = toLastMessage(message);
-  const lastMessage = existing?.lastMessage
-    && Date.parse(existing.lastMessage.createdAt) > Date.parse(incoming.createdAt)
-    ? existing.lastMessage
-    : incoming;
-  const updated: ChatSummary = { ...(existing ?? toContact(partner)), lastMessage };
+  const isNewest = !existing?.lastMessage
+    || Date.parse(existing.lastMessage.createdAt) <= Date.parse(incoming.createdAt);
+  const base: ChatSummary = existing ?? toContact(partner);
+  const updated: ChatSummary = isNewest
+    ? { ...withHidden(base, false), lastMessage: incoming }
+    : { ...base, lastMessage: existing!.lastMessage };
 
   return [updated, ...chats.filter((chat) => String(chat._id) !== partnerId)]
     .sort((a, b) => lastActivity(b) - lastActivity(a));
@@ -95,9 +104,20 @@ const withoutChat = (state: ChatStore, userId: string, deletedBefore: string): P
     chats: state.chats.filter((chat) => String(chat._id) !== userId),
     unreadCounts,
     deletedChats: { ...state.deletedChats, [userId]: deletedBefore },
+    minimizedChats: state.minimizedChats.filter((chat) => String(chat._id) !== userId),
+    drafts: withoutKey(state.drafts, userId),
     ...(isOpen && { selectedUser: null, messages: [] }),
   };
 };
+
+// Marks a chat hidden or not; hiding the open one also closes it.
+const withHiddenChat = (state: ChatStore, userId: string, hidden: boolean): Partial<ChatStore> => ({
+  chats: state.chats.map((chat) => (String(chat._id) === userId ? withHidden(chat, hidden) : chat)),
+  ...(hidden && String(state.selectedUser?._id) === userId && { selectedUser: null, messages: [] }),
+});
+
+// At most this many conversations wait in the minimized bar.
+const MAX_MINIMIZED_CHATS = 5;
 
 // Puts an edited or deleted-for-everyone message in place, in the open
 // conversation and in the chat list preview when it is the newest one.
@@ -124,11 +144,12 @@ const withoutMessage = (state: ChatStore, messageId: string, peerId: string) => 
   return { changes: { messages, chats }, refetch: false };
 };
 
-const withoutMute = (mutes: Record<string, string | null>, userId: string) => {
-  const rest = { ...mutes };
-  delete rest[userId];
+const withoutKey = <T,>(map: Record<string, T>, key: string) => {
+  const rest = { ...map };
+  delete rest[key];
   return rest;
 };
+const withoutMute = withoutKey<string | null>;
 
 const changeErrorMessage = (error: unknown, fallback: string) => {
   const apiError = createApiError(error);
@@ -152,6 +173,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messagingRevision: 0,
   deletedChats: {},
   mutes: {},
+  minimizedChats: [],
+  drafts: {},
   isUsersLoading: false,
   isMessagesLoading: false,
   socketBound: false,
@@ -174,9 +197,34 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     return isConversationVisible && String(selectedUser?._id) === userId && isWindowInView();
   },
 
+  // Opening a minimized conversation takes it out of the minimized bar.
   setSelectedUser: (selectedUser) => {
-    set({ selectedUser: selectedUser && toContact(selectedUser) });
+    set((state) => ({
+      selectedUser: selectedUser && toContact(selectedUser),
+      minimizedChats: selectedUser
+        ? state.minimizedChats.filter((chat) => chat._id !== selectedUser._id)
+        : state.minimizedChats,
+    }));
   },
+
+  minimizeChat: () => {
+    const { selectedUser } = get();
+    if (!selectedUser) return;
+    set((state) => ({
+      minimizedChats: [
+        ...state.minimizedChats.filter((chat) => chat._id !== selectedUser._id),
+        toContact(selectedUser),
+      ].slice(-MAX_MINIMIZED_CHATS),
+      selectedUser: null,
+      messages: [],
+    }));
+  },
+
+  closeMinimizedChat: (userId) =>
+    set((state) => ({ minimizedChats: state.minimizedChats.filter((chat) => chat._id !== userId) })),
+
+  setDraft: (userId, text) =>
+    set((state) => (text ? { drafts: { ...state.drafts, [userId]: text } } : { drafts: withoutKey(state.drafts, userId) })),
 
   getMyChatPartners: async () => {
     const sessionVersion = getAuthSessionVersion();
@@ -274,6 +322,37 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } catch (e) {
       if (isCurrentAuthSession(sessionVersion)) {
         handleStoreError(e, changeErrorMessage(e, "Couldn't unmute the chat. Try again later."));
+      }
+      return false;
+    }
+  },
+
+  hideChat: async (user) => {
+    const sessionVersion = getAuthSessionVersion();
+    try {
+      await apiService.put(`/messages/chats/${user._id}/hide`, {});
+      if (!isCurrentAuthSession(sessionVersion)) return false;
+      set((state) => withHiddenChat(state, String(user._id), true));
+      toast.success(`Hid your chat with ${user.fullName}. It comes back with the next message.`);
+      return true;
+    } catch (e) {
+      if (isCurrentAuthSession(sessionVersion)) {
+        handleStoreError(e, changeErrorMessage(e, "Couldn't hide the chat. Try again later."));
+      }
+      return false;
+    }
+  },
+
+  unhideChat: async (user) => {
+    const sessionVersion = getAuthSessionVersion();
+    try {
+      await apiService.delete(`/messages/chats/${user._id}/hide`);
+      if (!isCurrentAuthSession(sessionVersion)) return false;
+      set((state) => withHiddenChat(state, String(user._id), false));
+      return true;
+    } catch (e) {
+      if (isCurrentAuthSession(sessionVersion)) {
+        handleStoreError(e, changeErrorMessage(e, "Couldn't unhide the chat. Try again later."));
       }
       return false;
     }
@@ -549,6 +628,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((state) => ({ mutes: withoutMute(state.mutes, String(userId)) }));
     };
 
+    // Hidden or unhidden in another tab.
+    const onChatHidden = ({ userId }: { userId: string }) => {
+      if (!isActiveSocket()) return;
+      set((state) => withHiddenChat(state, String(userId), true));
+    };
+    const onChatUnhidden = ({ userId }: { userId: string }) => {
+      if (!isActiveSocket()) return;
+      set((state) => withHiddenChat(state, String(userId), false));
+    };
+
     // Deleted for this user in another tab.
     const onMessageHidden = ({ messageId, peerId }: { messageId: string; peerId: string }) => {
       if (!isActiveSocket()) return;
@@ -565,6 +654,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     socket.on("message:hidden", onMessageHidden);
     socket.on("chat:muted", onChatMuted);
     socket.on("chat:unmuted", onChatUnmuted);
+    socket.on("chat:hidden", onChatHidden);
+    socket.on("chat:unhidden", onChatUnhidden);
     set({
       socketBound: true,
       boundSocket: socket,
@@ -577,6 +668,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         socket.off("message:hidden", onMessageHidden);
         socket.off("chat:muted", onChatMuted);
         socket.off("chat:unmuted", onChatUnmuted);
+        socket.off("chat:hidden", onChatHidden);
+        socket.off("chat:unhidden", onChatUnhidden);
       },
     });
   },

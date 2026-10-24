@@ -3,6 +3,7 @@ import ActiveTabSwitch from "./components/ActiveTabSwitch";
 import ChatContainer from "./components/ChatContainer";
 import ChatsList from "./components/ChatsList";
 import FriendsPanel from "./components/friends/FriendsPanel";
+import MinimizedChats, { MINIMIZED_LIST_SPACE } from "./components/MinimizedChats";
 import NoConversationPlaceholder from "./components/NoConversationPlaceholder";
 import ProfileHeader from "./components/ProfileHeader";
 import SearchField from "./components/SearchField";
@@ -11,7 +12,7 @@ import { useChatStore } from "./store/useChatStore";
 import { useFriendsStore } from "./store/useFriendsStore";
 
 function ChatsLayout() {
-  const { activeTab, selectedUser, chats, chatSearchQuery, setChatSearchQuery } =
+  const { activeTab, selectedUser, chats, chatSearchQuery, setChatSearchQuery, minimizedChats } =
     useChatStore();
   const loadFriends = useFriendsStore((state) => state.loadFriends);
 
@@ -41,7 +42,11 @@ function ChatsLayout() {
           )}
 
           {activeTab === "chats" ? (
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 pb-4 pt-2 sm:px-4">
+            <div
+              className={`min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 pb-4 pt-2 sm:px-4 ${
+                minimizedChats.length > 0 ? MINIMIZED_LIST_SPACE : ""
+              }`}
+            >
               <ChatsList />
             </div>
           ) : (
@@ -50,6 +55,7 @@ function ChatsLayout() {
         </>
       }
       content={selectedUser ? <ChatContainer /> : <NoConversationPlaceholder />}
+      overlay={<MinimizedChats />}
     />
   );
 }

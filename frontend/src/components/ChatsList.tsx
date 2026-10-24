@@ -1,10 +1,10 @@
 import { useChatStore } from "@/store/useChatStore";
-import { useEffect, memo, useMemo, useCallback } from "react";
+import { useEffect, memo, useMemo, useCallback, useId, useState } from "react";
 import UsersLoadingSkeleton from "./UsersLoadingSkeleton";
 import NoChatsFound from "./NoChatsFound";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { ChatSummary } from "@/types/chat";
-import { BellOffIcon, PaperclipIcon, UserRoundIcon } from "lucide-react";
+import { BellOffIcon, ChevronDownIcon, EyeOffIcon, PaperclipIcon, UserRoundIcon } from "lucide-react";
 import { formatChatTimestamp, formatFullTimestamp } from "@/utils/chatTimestamp";
 import { filterChats } from "@/utils/chatSearch";
 import { isChatMuted } from "@/utils/chatMute";
@@ -117,6 +117,13 @@ const ChatItem = memo(
                     aria-label="Muted"
                   />
                 )}
+                {chat.hidden && (
+                  <EyeOffIcon
+                    className="size-3.5 shrink-0 text-slate-500"
+                    role="img"
+                    aria-label="Hidden"
+                  />
+                )}
               </div>
               <p
                 className={`mt-1 flex min-w-0 items-center gap-1 text-xs ${unread > 0 ? "text-slate-300" : "text-slate-400"}`}
@@ -178,11 +185,17 @@ function ChatsList() {
   } = useChatStore();
   const { onlineUsers, authUser } = useAuthStore();
 
+  const [showHidden, setShowHidden] = useState(false);
+  const hiddenListId = useId();
   const visibleChats = useMemo(
     () => (Array.isArray(chats) ? filterChats(chats, chatSearchQuery) : []),
     [chats, chatSearchQuery],
   );
   const isSearching = chatSearchQuery.trim().length > 0;
+  // Search looks through hidden chats too; otherwise they wait in their section.
+  const listedChats = isSearching ? visibleChats : visibleChats.filter((chat) => !chat.hidden);
+  const hiddenChats = isSearching ? [] : visibleChats.filter((chat) => chat.hidden);
+  const hiddenUnread = hiddenChats.reduce((sum, chat) => sum + (unreadCounts[chat._id] || 0), 0);
 
   // Memoize the getMyChatPartners function to prevent unnecessary re-calls
   const getMyChatPartnersStable = useCallback(() => {
@@ -201,6 +214,19 @@ function ChatsList() {
       setSelectedUser(chat);
     },
     [setSelectedUser],
+  );
+
+  const renderChat = (chat: ChatSummary) => (
+    <ChatItem
+      key={chat._id}
+      chat={chat}
+      myId={authUser?._id}
+      isOnline={onlineUsersSet.has(chat._id)}
+      isSelected={selectedUser?._id === chat._id}
+      unread={unreadCounts[chat._id] || 0}
+      isMuted={isChatMuted(mutes, String(chat._id))}
+      onSelect={handleSelectUser}
+    />
   );
 
   if (isUsersLoading) {
@@ -222,18 +248,38 @@ function ChatsList() {
       {isSearching && visibleChats.length === 0 && (
         <NoSearchResults query={chatSearchQuery} onClear={() => setChatSearchQuery("")} />
       )}
-      {visibleChats.map((chat) => (
-        <ChatItem
-          key={chat._id}
-          chat={chat}
-          myId={authUser?._id}
-          isOnline={onlineUsersSet.has(chat._id)}
-          isSelected={selectedUser?._id === chat._id}
-          unread={unreadCounts[chat._id] || 0}
-          isMuted={isChatMuted(mutes, String(chat._id))}
-          onSelect={handleSelectUser}
-        />
-      ))}
+      {listedChats.map(renderChat)}
+      {!isSearching && listedChats.length === 0 && hiddenChats.length > 0 && (
+        <p className="px-3 py-6 text-center text-sm text-slate-400">All your chats are hidden.</p>
+      )}
+      {hiddenChats.length > 0 && (
+        <div className="pt-2">
+          <button
+            type="button"
+            aria-expanded={showHidden}
+            aria-controls={hiddenListId}
+            onClick={() => setShowHidden((shown) => !shown)}
+            className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-xl px-3 text-left text-sm text-slate-400 transition-colors hover:bg-slate-800/50 hover:text-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+          >
+            <EyeOffIcon className="size-4 shrink-0" aria-hidden="true" />
+            <span className="flex-1">Hidden chats ({hiddenChats.length})</span>
+            {hiddenUnread > 0 && (
+              <span className="text-xs text-cyan-300">
+                {hiddenUnread > 99 ? "99+" : hiddenUnread} unread
+              </span>
+            )}
+            <ChevronDownIcon
+              className={`size-4 shrink-0 transition-transform ${showHidden ? "rotate-180" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+          {showHidden && (
+            <div id={hiddenListId} className="mt-2 space-y-2">
+              {hiddenChats.map(renderChat)}
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }

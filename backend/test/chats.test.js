@@ -14,10 +14,11 @@ const { default: mongoose } = await import("mongoose");
 const { default: Message } = await import("../src/models/message.model.js");
 const { default: ChatDeletion } = await import("../src/models/chatDeletion.model.js");
 const { default: ChatMute } = await import("../src/models/chatMute.model.js");
+const { default: ChatHide } = await import("../src/models/chatHide.model.js");
 const { default: logger } = await import("../src/config/logger.js");
 const { buildChatSummariesPipeline, LAST_MESSAGE_PREVIEW_LENGTH } =
   await import("../src/services/chat.service.js");
-const { deleteChat, getChats, getMessagesById, muteChat, unmuteChat } =
+const { deleteChat, getChats, getMessagesById, hideChat, muteChat, unhideChat, unmuteChat } =
   await import("../src/controllers/message.controller.js");
 const { io } = await import("../src/config/socket.js");
 const { s3Storage } = await import("../src/config/storage.js");
@@ -33,10 +34,13 @@ const leanQuery = (result) => {
 // Every test starts with no deleted or muted chats; their tests replace these.
 let deletions;
 let mutes;
+let hides;
 beforeEach(() => {
   deletions = [];
   mutes = [];
+  hides = [];
   mock.method(ChatMute, "find", () => leanQuery(mutes));
+  mock.method(ChatHide, "find", () => leanQuery(hides));
   mock.method(ChatDeletion, "find", (filter) =>
     leanQuery(deletions.filter((d) => !filter.userId || String(d.userId) === String(filter.userId))));
   mock.method(ChatDeletion, "findOne", ({ userId, peerId }) =>
@@ -319,4 +323,50 @@ test("the chat list carries the mutes still in force", async () => {
   assert.deepEqual(res.body.mutes, { [partnerId]: until.toISOString(), [quietPartnerId]: null });
   // Ended mutes are left out even before the TTL index removes them.
   assert.ok(filter.$or.some((rule) => rule.mutedUntil?.$gt instanceof Date));
+});
+
+test("a hidden chat is marked until a message newer than the hiding arrives", async () => {
+  const hiddenAt = new Date("2026-10-20T12:00:00Z");
+  hides = [
+    { peerId: partnerId, hiddenAt },
+    { peerId: quietPartnerId, hiddenAt },
+  ];
+  const at = (iso) => ({ _id: "m", senderId: partnerId, text: "hi", hasAttachment: false, createdAt: new Date(iso) });
+  mock.method(Message, "aggregate", () => Promise.resolve([
+    { _id: partnerId, fullName: "Ada", profilePic: "", unreadCount: 0, lastMessage: at("2026-10-20T11:00:00Z") },
+    { _id: quietPartnerId, fullName: "Bo", profilePic: "", unreadCount: 1, lastMessage: at("2026-10-20T13:00:00Z") },
+  ]));
+
+  const res = response();
+  await getChats({ user: { _id: myId }, requestId: "req-8" }, res);
+
+  assert.equal(res.body.chats[0].hidden, true);
+  assert.equal("hidden" in res.body.chats[1], false, "a newer message brought it back");
+});
+
+test("hiding and unhiding change only my own list", async () => {
+  const upsert = mock.method(ChatHide, "updateOne", () => Promise.resolve({}));
+  const remove = mock.method(ChatHide, "deleteOne", () => Promise.resolve({ deletedCount: 1 }));
+  const events = trackSocketEvents();
+
+  const hidden = response();
+  await hideChat(muteRequest(undefined), hidden);
+  const unhidden = response();
+  await unhideChat(muteRequest(undefined), unhidden);
+  const self = response();
+  await hideChat(muteRequest(undefined, myId), self);
+
+  assert.equal(hidden.statusCode, 200);
+  const [filter, update, options] = upsert.mock.calls[0].arguments;
+  assert.deepEqual(filter, { userId: myId, peerId: partnerId });
+  assert.ok(update.$set.hiddenAt instanceof Date);
+  assert.deepEqual(options, { upsert: true });
+  assert.equal(unhidden.statusCode, 200);
+  assert.deepEqual(remove.mock.calls[0].arguments[0], { userId: myId, peerId: partnerId });
+  assert.equal(self.statusCode, 400);
+  assert.equal(upsert.mock.callCount(), 1);
+  assert.deepEqual(events.map(({ room, event }) => [room, event]), [
+    [`user:${myId}`, "chat:hidden"],
+    [`user:${myId}`, "chat:unhidden"],
+  ]);
 });
