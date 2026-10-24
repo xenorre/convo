@@ -758,3 +758,41 @@ describe('typing', () => {
     expect(useChatStore.getState().typingUsers).toEqual({});
   });
 });
+
+describe('read receipts', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useChatStore.setState(useChatStore.getInitialState(), true);
+    useAuthStore.setState({
+      ...useAuthStore.getInitialState(),
+      authUser: { _id: 'my-id', fullName: 'Current User', email: 'current@example.com', profilePic: '' },
+      socket: { on: socketOn, off: vi.fn() } as unknown as AppSocket,
+    }, true);
+  });
+
+  it('marks my messages to the reader up to the read time, and nothing else', () => {
+    const mine = (id: string, createdAt: string, receiverId = sender._id): Message =>
+      ({ ...message, _id: id, senderId: 'my-id', receiverId, createdAt });
+    useChatStore.setState({
+      messages: [
+        mine('before', '2026-10-19T12:00:00.000Z'),
+        mine('after', '2026-10-19T12:10:00.000Z'),
+        mine('temp-1', '2026-10-19T12:00:00.000Z'),
+        mine('to-someone-else', '2026-10-19T12:00:00.000Z', 'other-id'),
+        message,
+      ],
+    });
+    useChatStore.getState().bindSocketOnce();
+    const onRead = socketOn.mock.calls.filter(([name]) => name === 'messages:read').at(-1)![1];
+
+    onRead({ readerId: sender._id, readAt: '2026-10-19T12:05:00.000Z' });
+
+    expect(useChatStore.getState().messages.map((m) => [m._id, m.readAt ?? null])).toEqual([
+      ['before', '2026-10-19T12:05:00.000Z'],
+      ['after', null],
+      ['temp-1', null],
+      ['to-someone-else', null],
+      [message._id, null],
+    ]);
+  });
+});

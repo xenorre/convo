@@ -8,6 +8,7 @@ export const PRIVACY_DEFAULTS = Object.freeze({
   allowMessagesFrom: "friends",
   allowFriendRequestsFrom: "everyone",
   showOnlineStatus: true,
+  readReceipts: true,
 });
 
 export const PRIVACY_ERRORS = Object.freeze({
@@ -23,6 +24,7 @@ export const privacyOf = (user) => {
     allowMessagesFrom: stored.allowMessagesFrom ?? PRIVACY_DEFAULTS.allowMessagesFrom,
     allowFriendRequestsFrom: stored.allowFriendRequestsFrom ?? PRIVACY_DEFAULTS.allowFriendRequestsFrom,
     showOnlineStatus: stored.showOnlineStatus ?? PRIVACY_DEFAULTS.showOnlineStatus,
+    readReceipts: stored.readReceipts ?? PRIVACY_DEFAULTS.readReceipts,
   };
 };
 
@@ -108,6 +110,13 @@ export const messagePermission = async (senderId, receiver) => {
   if (privacyOf(receiver).allowMessagesFrom === "everyone") return { allowed: true };
   if (await areFriends(senderId, receiver._id)) return { allowed: true };
   return { allowed: false, reason: "FRIENDS_ONLY" };
+};
+
+// Read receipts are mutual: they flow between two people only when both
+// have them on, so nobody can see receipts while hiding their own.
+export const readReceiptsBetween = async (a, b) => {
+  const users = await User.find({ _id: { $in: [a, b] } }).select("privacy").lean();
+  return users.length === 2 && users.every((user) => privacyOf(user).readReceipts);
 };
 
 // The online list everyone receives, minus people who hide their status.

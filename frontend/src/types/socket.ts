@@ -21,6 +21,7 @@ export interface ServerToClientEvents {
   'message:deleted': (data: { message: Message; wasUnread: boolean }) => void;
   'message:hidden': (data: { messageId: string; peerId: string }) => void;
   typing: (data: { userId: string; isTyping: boolean }) => void;
+  'messages:read': (data: { readerId: string; readAt: string }) => void;
 }
 
 export interface ClientToServerEvents {

@@ -14,7 +14,7 @@ vi.mock('react-hot-toast', () => ({
   default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }),
 }));
 
-const defaults = { allowMessagesFrom: 'friends', allowFriendRequestsFrom: 'everyone', showOnlineStatus: true };
+const defaults = { allowMessagesFrom: 'friends', allowFriendRequestsFrom: 'everyone', showOnlineStatus: true, readReceipts: true };
 const renderPrivacy = () => render(<MemoryRouter><PrivacySettings /></MemoryRouter>);
 
 describe('Privacy settings', () => {
@@ -30,9 +30,12 @@ describe('Privacy settings', () => {
 
   it('shows the saved settings and saves each change right away', async () => {
     const user = userEvent.setup();
-    vi.mocked(apiService.patch).mockImplementation(async (_, body) => ({
-      privacy: { ...defaults, ...(body as { privacy: object }).privacy },
-    }));
+    // Like the server, each answer carries every change saved so far.
+    let saved = { ...defaults };
+    vi.mocked(apiService.patch).mockImplementation(async (_, body) => {
+      saved = { ...saved, ...(body as { privacy: object }).privacy };
+      return { privacy: saved };
+    });
     renderPrivacy();
 
     const friendsOnly = await screen.findByRole('radio', { name: 'Friends only' });
@@ -41,11 +44,13 @@ describe('Privacy settings', () => {
     await user.click(screen.getAllByRole('radio', { name: 'Everyone' })[0]);
     await user.click(screen.getByRole('radio', { name: 'Nobody' }));
     await user.click(screen.getByRole('switch', { name: "Show when I'm online" }));
+    await user.click(screen.getByRole('switch', { name: "Show when I've read messages" }));
 
     expect(vi.mocked(apiService.patch).mock.calls.map(([url, body]) => [url, body])).toEqual([
       ['/users/settings', { privacy: { allowMessagesFrom: 'everyone' } }],
       ['/users/settings', { privacy: { allowFriendRequestsFrom: 'nobody' } }],
       ['/users/settings', { privacy: { showOnlineStatus: false } }],
+      ['/users/settings', { privacy: { readReceipts: false } }],
     ]);
     expect(screen.getByRole('switch', { name: "Show when I'm online" })).toHaveAttribute('aria-checked', 'false');
   });

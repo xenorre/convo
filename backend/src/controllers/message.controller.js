@@ -1,6 +1,6 @@
 import Message from "#src/models/message.model.js";
 import User from "#src/models/user.model.js";
-import { messagePermission } from "#src/services/privacy.service.js";
+import { messagePermission, readReceiptsBetween } from "#src/services/privacy.service.js";
 import { uploadMessageFile } from "#src/services/storage.service.js";
 import {
   MESSAGE_ERRORS,
@@ -23,6 +23,21 @@ import {
 } from "#src/services/chat.service.js";
 import logger from "#src/config/logger.js";
 import { io } from "#src/config/socket.js";
+
+const toJson = (message) => (typeof message.toJSON === "function" ? message.toJSON() : message);
+
+// When read receipts are off on either side, the sender doesn't learn when
+// their messages were read, so readAt stays null in what they receive.
+// updatedAt goes back to the sender's own last change too: messages read
+// before reading stopped touching it carry the read time there.
+const forViewer = (json, viewerId, showReceipts) =>
+  showReceipts || String(json.senderId) !== String(viewerId)
+    ? json
+    : { ...json, readAt: null, updatedAt: json.deletedAt ?? json.editedAt ?? json.createdAt };
+
+// Only worth asking when there is a read time to hide.
+const receiptsShownFor = (message) =>
+  message.readAt ? readReceiptsBetween(message.senderId, message.receiverId) : Promise.resolve(true);
 
 export const getMessagesById = async (req, res) => {
   try {
@@ -48,8 +63,11 @@ export const getMessagesById = async (req, res) => {
       // Without an explicit sort MongoDB returns index order, not chronology.
       .sort({ createdAt: 1, _id: 1 });
 
+    const hasReadReceipts = message.some((msg) => String(msg.senderId) === String(myId) && msg.readAt);
+    const showReceipts = !hasReadReceipts || (await readReceiptsBetween(myId, userToChatId));
+
     res.status(200).json({
-      messages: message,
+      messages: showReceipts ? message : message.map((msg) => forViewer(toJson(msg), myId, false)),
       requestId: req.requestId,
     });
   } catch (e) {
@@ -158,10 +176,18 @@ export const markRead = async (req, res) => {
   try {
     const myId = req.user._id;
     const { id: senderId } = req.params;
+    const readAt = new Date();
+    // Reading leaves updatedAt alone, so it can't tell the sender when.
     const result = await Message.updateMany(
       { receiverId: myId, senderId, readAt: null },
-      { $set: { readAt: new Date() } }
+      { $set: { readAt } },
+      { timestamps: false }
     );
+    // Everything they sent up to now is read; their tabs mark it, if both
+    // people share read receipts.
+    if (result.modifiedCount > 0 && (await readReceiptsBetween(myId, senderId))) {
+      io.to(`user:${senderId}`).emit("messages:read", { readerId: String(myId), readAt });
+    }
     res.status(200).json({ updated: result.modifiedCount || 0, requestId: req.requestId });
   } catch (e) {
     logger.error("Failed to mark messages as read", { requestId: req.requestId, error: e.message });
@@ -232,8 +258,9 @@ const sendMessageError = (req, res, e, action) => {
   res.status(500).json({ error: "Internal server error", requestId: req.requestId });
 };
 
-const emitToViewers = (message, event, payload) => {
-  for (const userId of viewersOf(message)) io.to(`user:${userId}`).emit(event, payload);
+// `payloadFor(viewerId)` builds what each participant who can see it receives.
+const emitToViewers = (message, event, payloadFor) => {
+  for (const userId of viewersOf(message)) io.to(`user:${userId}`).emit(event, payloadFor(userId));
 };
 
 export const editMessage = async (req, res) => {
@@ -249,8 +276,9 @@ export const editMessage = async (req, res) => {
   try {
     const message = await editMessageText(req.user._id, req.params.id, parsed.data.text);
     const json = message.toJSON();
-    emitToViewers(message, "message:updated", { message: json });
-    res.status(200).json({ message: json, requestId: req.requestId });
+    const showReceipts = await receiptsShownFor(message);
+    emitToViewers(message, "message:updated", (viewerId) => ({ message: forViewer(json, viewerId, showReceipts) }));
+    res.status(200).json({ message: forViewer(json, req.user._id, showReceipts), requestId: req.requestId });
   } catch (e) {
     sendMessageError(req, res, e, "edit");
   }
@@ -270,8 +298,14 @@ export const deleteMessage = async (req, res) => {
     if (parsed.data.for === "everyone") {
       const { message, wasUnread } = await deleteMessageForEveryone(req.user._id, req.params.id);
       const json = message.toJSON();
-      emitToViewers(message, "message:deleted", { message: json, wasUnread });
-      return res.status(200).json({ message: json, requestId: req.requestId });
+      const showReceipts = await receiptsShownFor(message);
+      emitToViewers(message, "message:deleted", (viewerId) => ({
+        message: forViewer(json, viewerId, showReceipts),
+        // Only the receiver's unread count needs it; for the sender it would
+        // tell whether the message had been read.
+        wasUnread: String(viewerId) === String(message.receiverId) && wasUnread,
+      }));
+      return res.status(200).json({ message: forViewer(json, req.user._id, showReceipts), requestId: req.requestId });
     }
 
     const { messageId, peerId } = await deleteMessageForMe(req.user._id, req.params.id);

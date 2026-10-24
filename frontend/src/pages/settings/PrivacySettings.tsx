@@ -127,6 +127,14 @@ function PrivacySettings() {
               onChange={(value) => update({ showOnlineStatus: value })}
             />
           </SettingsCard>
+          <SettingsCard title="Read receipts">
+            <SettingToggle
+              label="Show when I've read messages"
+              description="When off, people won't see when you've read their messages, and you won't see when they've read yours."
+              checked={privacy.readReceipts}
+              onChange={(value) => update({ readReceipts: value })}
+            />
+          </SettingsCard>
         </>
       )}
 

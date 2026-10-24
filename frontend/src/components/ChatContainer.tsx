@@ -80,6 +80,9 @@ function ChatContainer() {
 
   // Follows new messages only; an edit or a deletion further up stays in view.
   const lastMessageId = messages.at(-1)?._id;
+  const myId = authUser?._id ? String(authUser._id) : "";
+  // "Read 18:42" goes under the newest of my messages they have read.
+  const lastReadId = [...messages].reverse().find((msg) => msg.senderId === myId && msg.readAt && !msg.deletedAt)?._id;
   useEffect(() => {
     const container = messagesRef.current;
     container?.scrollTo({
@@ -114,8 +117,9 @@ function ChatContainer() {
               <MessageBubble
                 key={msg._id}
                 message={msg}
-                myId={authUser?._id ? String(authUser._id) : ""}
+                myId={myId}
                 peerName={selectedUser?.fullName || "They"}
+                showReadTime={msg._id === lastReadId}
               />
             ))}
           </div>

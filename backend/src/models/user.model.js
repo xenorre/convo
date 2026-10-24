@@ -31,6 +31,8 @@ const users = new mongoose.Schema(
       allowMessagesFrom: { type: String, enum: ["everyone", "friends"], default: "friends" },
       allowFriendRequestsFrom: { type: String, enum: ["everyone", "nobody"], default: "everyone" },
       showOnlineStatus: { type: Boolean, default: true },
+      // Mutual: off means neither sending nor seeing read receipts.
+      readReceipts: { type: Boolean, default: true },
     },
   },
   {

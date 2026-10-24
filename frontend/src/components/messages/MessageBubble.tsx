@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { CheckCheckIcon, CheckIcon, Clock3Icon } from "lucide-react";
 import type { Message } from "@/types/message";
 import { formatFullTimestamp, formatMessageTime } from "@/utils/chatTimestamp";
 import { isPendingMessage } from "@/utils/messageEditing";
@@ -9,9 +10,39 @@ interface MessageBubbleProps {
   message: Message;
   myId: string;
   peerName: string;
+  // The newest of my messages they have read gets "Read 18:42" beneath it.
+  showReadTime?: boolean;
 }
 
-function MessageBubble({ message, myId, peerName }: MessageBubbleProps) {
+// ✓ sent, ✓✓ read, a clock while it is still being sent. The shapes differ,
+// so the state doesn't depend on colour alone.
+function DeliveryMark({ message }: { message: Message }) {
+  if (isPendingMessage(message)) {
+    return (
+      <span title="Sending" className="inline-flex">
+        <Clock3Icon className="size-3" aria-hidden="true" />
+        <span className="sr-only">Sending</span>
+      </span>
+    );
+  }
+  if (message.readAt) {
+    const readLabel = `Read ${formatFullTimestamp(message.readAt)}`;
+    return (
+      <span title={readLabel} className="inline-flex text-cyan-100">
+        <CheckCheckIcon className="size-3.5" aria-hidden="true" />
+        <span className="sr-only">{readLabel}</span>
+      </span>
+    );
+  }
+  return (
+    <span title="Sent" className="inline-flex">
+      <CheckIcon className="size-3.5" aria-hidden="true" />
+      <span className="sr-only">Sent</span>
+    </span>
+  );
+}
+
+function MessageBubble({ message, myId, peerName, showReadTime = false }: MessageBubbleProps) {
   const [isEditing, setIsEditing] = useState(false);
   const isMine = message.senderId === myId;
   const isDeleted = Boolean(message.deletedAt);
@@ -45,11 +76,18 @@ function MessageBubble({ message, myId, peerName }: MessageBubbleProps) {
             )}
           </>
         )}
-        <p className="mt-1.5 text-right text-[10px] leading-none not-italic opacity-65">
-          {message.editedAt && !isDeleted && (
-            <span title={`Edited ${formatFullTimestamp(message.editedAt)}`}>Edited · </span>
+        <p className="mt-1.5 flex items-center justify-end gap-1 text-[10px] leading-none not-italic">
+          <span className="opacity-65">
+            {message.editedAt && !isDeleted && (
+              <span title={`Edited ${formatFullTimestamp(message.editedAt)}`}>Edited · </span>
+            )}
+            {formatMessageTime(message.createdAt || new Date())}
+          </span>
+          {isMine && !isDeleted && (
+            <span className={message.readAt ? "" : "opacity-65"}>
+              <DeliveryMark message={message} />
+            </span>
           )}
-          {formatMessageTime(message.createdAt || new Date())}
         </p>
 
         {!isEditing && !isPendingMessage(message) && (
@@ -62,6 +100,11 @@ function MessageBubble({ message, myId, peerName }: MessageBubbleProps) {
           />
         )}
       </div>
+      {showReadTime && message.readAt && (
+        <div className="chat-footer mt-1 text-[10px] text-slate-400">
+          Read {formatMessageTime(message.readAt)}
+        </div>
+      )}
     </div>
   );
 }

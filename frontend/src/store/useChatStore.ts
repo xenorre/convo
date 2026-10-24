@@ -20,6 +20,7 @@ import type {
 } from "@/types/api";
 import { useFriendsStore } from "./useFriendsStore";
 import { isChatMuted } from "@/utils/chatMute";
+import { isPendingMessage } from "@/utils/messageEditing";
 
 // Normalize messages coming from various sources (REST/socket) to ensure
 // senderId/receiverId are plain strings. Some backends may emit populated
@@ -48,6 +49,7 @@ const normalizeMessage = (msg: any): Message => ({
   createdAt: typeof msg.createdAt === "string" ? msg.createdAt : new Date().toISOString(),
   updatedAt: typeof msg.updatedAt === "string" ? msg.updatedAt : new Date().toISOString(),
   // Only on messages that were changed, so ordinary ones keep their shape.
+  ...(typeof msg.readAt === "string" && { readAt: msg.readAt }),
   ...(typeof msg.editedAt === "string" && { editedAt: msg.editedAt }),
   ...(typeof msg.deletedAt === "string" && { deletedAt: msg.deletedAt }),
 });
@@ -621,6 +623,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       });
     };
 
+    // They read everything sent to them up to `readAt`.
+    const onMessagesRead = ({ readerId, readAt }: { readerId: string; readAt: string }) => {
+      if (!isActiveSocket()) return;
+      const myId = String(useAuthStore.getState().authUser?._id);
+      const readUntil = Date.parse(readAt);
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg.senderId === myId && msg.receiverId === String(readerId) && !msg.readAt
+            && !isPendingMessage(msg) && Date.parse(msg.createdAt) <= readUntil
+            ? { ...msg, readAt }
+            : msg),
+      }));
+    };
+
     const onTyping = ({ userId, isTyping }: { userId: string; isTyping: boolean }) => {
       if (!isActiveSocket()) return;
       setTyping(String(userId), isTyping);
@@ -664,6 +680,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     socket.on("chat:unmuted", onChatUnmuted);
     socket.on("chat:hidden", onChatHidden);
     socket.on("typing", onTyping);
+    socket.on("messages:read", onMessagesRead);
     socket.on("chat:unhidden", onChatUnhidden);
     set({
       socketBound: true,
@@ -679,6 +696,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         socket.off("chat:unmuted", onChatUnmuted);
         socket.off("chat:hidden", onChatHidden);
         socket.off("typing", onTyping);
+        socket.off("messages:read", onMessagesRead);
         socket.off("chat:unhidden", onChatUnhidden);
       },
     });

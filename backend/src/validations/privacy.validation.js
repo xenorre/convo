@@ -7,6 +7,7 @@ export const privacyUpdateSchema = z
         allowMessagesFrom: z.enum(["everyone", "friends"]).optional(),
         allowFriendRequestsFrom: z.enum(["everyone", "nobody"]).optional(),
         showOnlineStatus: z.boolean().optional(),
+        readReceipts: z.boolean().optional(),
       })
       .strict()
       .refine((value) => Object.keys(value).length > 0, "Nothing to update"),

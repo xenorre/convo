@@ -184,9 +184,25 @@ describe('message actions', () => {
     vi.mocked(apiService.get).mockImplementation(async (url) =>
       url === '/users/sam/messaging' ? { canMessage: true } : { messages: [] });
     await renderConversation();
-    await act(async () => useChatStore.setState({ messages: [message({ _id: 'temp-1', text: 'Sending' })] }));
+    await act(async () => useChatStore.setState({ messages: [message({ _id: 'temp-1', text: 'On its way' })] }));
 
-    const bubble = screen.getByText('Sending').closest('.chat-bubble') as HTMLElement;
+    const bubble = screen.getByText('On its way').closest('.chat-bubble') as HTMLElement;
     expect(within(bubble).queryByRole('button', { name: 'Message actions' })).toBeNull();
+    expect(within(bubble).getByText('Sending')).toBeInTheDocument();
+  });
+
+  it('marks my messages as sent or read, with the read time under the newest read one', async () => {
+    const readAt = new Date().toISOString();
+    vi.mocked(apiService.get).mockImplementation(async (url) =>
+      url === '/users/sam/messaging'
+        ? { canMessage: true }
+        : { messages: [{ ...oldMine, readAt }, fromSam, { ...mine, readAt }, message({ _id: 'm3', text: 'Unread yet', createdAt: minutesAgo(0) })] });
+    await renderConversation();
+
+    const bubble = (text: string) => screen.getByText(text).closest('.chat') as HTMLElement;
+    expect(within(bubble('Long ago')).getByText(/^Read /)).toBeInTheDocument();
+    expect(within(bubble('Helo')).getAllByText(/^Read /)).toHaveLength(2);
+    expect(within(bubble('Unread yet')).getByText('Sent')).toBeInTheDocument();
+    expect(within(bubble('Hey there')).queryByText(/^(Sent|Read)/)).toBeNull();
   });
 });

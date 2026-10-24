@@ -43,6 +43,7 @@ export interface PrivacySettings {
   allowMessagesFrom: "everyone" | "friends";
   allowFriendRequestsFrom: "everyone" | "nobody";
   showOnlineStatus: boolean;
+  readReceipts: boolean;
 }
 
 export interface PrivacySettingsResponse {
