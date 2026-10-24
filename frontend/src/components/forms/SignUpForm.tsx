@@ -1,10 +1,11 @@
 import { Link } from "react-router";
 import { useState } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { EyeIcon, EyeOffIcon, LoaderCircle, LockIcon, MailIcon, UserIcon } from "lucide-react";
+import { LoaderCircle, LockIcon, MailIcon, UserIcon } from "lucide-react";
 import { validateEmail, sanitizeInput } from "@/utils/sanitize";
 import toast from "react-hot-toast";
 import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
+import PasswordVisibilityToggle from "./PasswordVisibilityToggle";
 import {
   PASSWORD_MAX_LENGTH,
   loadStrengthChecker,
@@ -203,20 +204,7 @@ function SignUpForm() {
               autoComplete="new-password"
               maxLength={PASSWORD_MAX_LENGTH}
             />
-            {/* Long passphrases are easier to type when they can be checked. */}
-            <button
-              type="button"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              aria-pressed={showPassword}
-              onClick={() => setShowPassword((shown) => !shown)}
-              className="absolute right-1 top-1/2 inline-flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 focus-visible:outline-2 focus-visible:outline-cyan-400"
-            >
-              {showPassword ? (
-                <EyeOffIcon className="size-5" aria-hidden="true" />
-              ) : (
-                <EyeIcon className="size-5" aria-hidden="true" />
-              )}
-            </button>
+            <PasswordVisibilityToggle shown={showPassword} onToggle={() => setShowPassword((shown) => !shown)} />
           </div>
           {errors.password && (
             <p

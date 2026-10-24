@@ -150,6 +150,20 @@ describe('Account settings', () => {
     await waitFor(() => expect(screen.getByText('Hard to guess (Good or Strong)').closest('li')).toHaveTextContent('Done:'));
   });
 
+  it('lets each password field be shown on its own', async () => {
+    const user = userEvent.setup();
+    renderAccount();
+
+    await user.click(screen.getByRole('button', { name: 'Show new password' }));
+
+    expect(field('New password')).toHaveAttribute('type', 'text');
+    expect(field('Current password')).toHaveAttribute('type', 'password');
+    expect(field('Confirm new password')).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: 'Hide new password' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Show current password' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show confirm new password' })).toBeInTheDocument();
+  });
+
   it('logs out from the session card', async () => {
     const user = userEvent.setup();
     renderAccount();

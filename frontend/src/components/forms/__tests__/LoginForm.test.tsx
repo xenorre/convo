@@ -114,3 +114,18 @@ describe('LoginForm', () => {
     expect(submitButton).not.toBeDisabled();
   });
 });
+describe('LoginForm password visibility', () => {
+  it('can show the password while typing it', async () => {
+    const user = userEvent.setup();
+    render(<LoginForm />);
+    const password = screen.getByLabelText('Password');
+
+    await user.type(password, 'secret phrase');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    expect(password).toHaveValue('secret phrase');
+
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+});

@@ -2,6 +2,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { useState } from "react";
 import { Link } from "react-router";
 import { LoaderCircle, LockIcon, MailIcon } from "lucide-react";
+import PasswordVisibilityToggle from "./PasswordVisibilityToggle";
 import { validateEmail, sanitizeInput } from "@/utils/sanitize";
 import toast from "react-hot-toast";
 
@@ -10,6 +11,7 @@ function LoginForm() {
     email: "",
     password: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>(
     {},
   );
@@ -107,7 +109,7 @@ function LoginForm() {
             <input
               id="login-password"
               name="password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               aria-invalid={Boolean(errors.password)}
               aria-describedby={
                 errors.password ? "login-password-error" : undefined
@@ -119,10 +121,11 @@ function LoginForm() {
                   setErrors((prev) => ({ ...prev, password: undefined }));
                 }
               }}
-              className={`auth-input ${errors.password ? "border-red-500 focus:ring-red-500" : ""}`}
+              className={`auth-input pr-12 ${errors.password ? "border-red-500 focus:ring-red-500" : ""}`}
               placeholder="••••••••"
               autoComplete="current-password"
             />
+            <PasswordVisibilityToggle shown={showPassword} onToggle={() => setShowPassword((shown) => !shown)} />
           </div>
           {errors.password && (
             <p

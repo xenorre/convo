@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import type { ChangePasswordRequest } from "@/types/api";
 import { createApiError, handleStoreError } from "@/utils/errorHandling";
 import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
+import PasswordVisibilityToggle from "@/components/forms/PasswordVisibilityToggle";
 import {
   PASSWORD_MAX_LENGTH,
   isPasswordPolicyCode,
@@ -69,24 +70,32 @@ interface PasswordFieldProps {
 
 function PasswordField({ id, label, value, error, autoComplete, hint, describedById, inputRef, onChange }: PasswordFieldProps) {
   const describedBy = [hint && `${id}-hint`, error && `${id}-error`, describedById].filter(Boolean).join(" ");
+  const [shown, setShown] = useState(false);
 
   return (
     <div>
       <label htmlFor={id} className="auth-input-label">
         {label}
       </label>
-      <input
-        ref={inputRef}
-        id={id}
-        type="password"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        autoComplete={autoComplete}
-        maxLength={PASSWORD_MAX_LENGTH}
-        aria-invalid={Boolean(error)}
-        aria-describedby={describedBy || undefined}
-        className={`auth-input pl-4 ${error ? "border-red-500 focus:ring-red-500" : ""}`}
-      />
+      <div className="relative">
+        <input
+          ref={inputRef}
+          id={id}
+          type={shown ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          autoComplete={autoComplete}
+          maxLength={PASSWORD_MAX_LENGTH}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy || undefined}
+          className={`auth-input pl-4 pr-12 ${error ? "border-red-500 focus:ring-red-500" : ""}`}
+        />
+        <PasswordVisibilityToggle
+          shown={shown}
+          onToggle={() => setShown((isShown) => !isShown)}
+          fieldName={label.toLowerCase()}
+        />
+      </div>
       {hint && !error && (
         <p id={`${id}-hint`} className="mt-2 text-xs text-slate-400">
           {hint}
