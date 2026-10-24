@@ -5,6 +5,7 @@ import type { AuthState, AuthUser } from '@/types/auth';
 import type { AppSocket } from '@/types/socket';
 import { env } from '@/config/env';
 import { createApiError, handleStoreError, isAuthError } from '@/utils/errorHandling';
+import { isPasswordPolicyCode } from '@/utils/passwordPolicy';
 import type { AuthResponse } from '@/types/api';
 import {
   advanceAuthSession,
@@ -79,15 +80,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ authUser: null, isSigningUp: true, isCheckingAuth: false });
     try {
       await apiService.post<AuthResponse>('/auth/sign-up', data);
-      if (!isCurrentAuthSession(sessionVersion)) return;
+      if (!isCurrentAuthSession(sessionVersion)) return null;
 
       // Re-check the account to use the canonical server user and IDs.
       await get().checkAuth();
       if (isCurrentAuthSession(sessionVersion) && get().authUser) {
         toast.success('Account created successfully');
       }
+      return null;
     } catch (e: unknown) {
-      if (isCurrentAuthSession(sessionVersion)) handleStoreError(e, 'Failed to create account');
+      if (!isCurrentAuthSession(sessionVersion)) return null;
+      const apiError = createApiError(e);
+      if (apiError.code && isPasswordPolicyCode(apiError.code)) {
+        return { code: apiError.code, message: apiError.message };
+      }
+      handleStoreError(e, 'Failed to create account');
+      return null;
     } finally {
       if (isCurrentAuthSession(sessionVersion)) set({ isSigningUp: false });
     }

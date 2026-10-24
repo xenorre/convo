@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, afterEach, before, mock, test } from "node:test";
+import { after, afterEach, before, beforeEach, mock, test } from "node:test";
 
 // These tests stub every database operation and never use a developer's DB,
 // Redis, credentials, or outbound email configuration.
@@ -19,6 +19,8 @@ const { io } = await import("../src/config/socket.js");
 const { default: bcrypt } = await import("bcrypt");
 
 logger.silent = true;
+// The breached-password check must never reach the real service from tests.
+beforeEach(() => mock.method(globalThis, "fetch", async () => new Response("", { status: 200 })));
 afterEach(() => mock.restoreAll());
 after(() => io.close());
 
@@ -63,12 +65,12 @@ const change = async (body) => {
 test("a password change stores the new hash and moves this browser to a new session", async () => {
   const { updateOne, closedRooms, emitted } = stubAccount();
 
-  const res = await change({ currentPassword: "old-password", newPassword: "new-password" });
+  const res = await change({ currentPassword: "old-password", newPassword: "violet-anchor-harbor-71" });
 
   assert.equal(res.statusCode, 200);
   const [filter, update] = updateOne.mock.calls[0].arguments;
   assert.deepEqual(filter, { _id: userId, activeSessionId: currentSid });
-  assert.ok(await bcrypt.compare("new-password", update.$set.password));
+  assert.ok(await bcrypt.compare("violet-anchor-harbor-71", update.$set.password));
   assert.notEqual(update.$set.activeSessionId, currentSid);
 
   const token = jwttoken.verify(res.cookieValue.value);
@@ -84,7 +86,7 @@ test("a password change stores the new hash and moves this browser to a new sess
 test("a wrong current password is a 400, so the client stays signed in", async () => {
   const { updateOne } = stubAccount();
 
-  const res = await change({ currentPassword: "guess", newPassword: "new-password" });
+  const res = await change({ currentPassword: "guess", newPassword: "violet-anchor-harbor-71" });
 
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.code, "INVALID_CURRENT_PASSWORD");
@@ -99,8 +101,8 @@ test("invalid requests are rejected before touching the account", async () => {
     { currentPassword: "old-password", newPassword: "short" },
     { currentPassword: "old-password", newPassword: "x".repeat(129) },
     { currentPassword: "old-password", newPassword: "old-password" },
-    { currentPassword: "", newPassword: "new-password" },
-    { currentPassword: "old-password", newPassword: "new-password", email: "a@b.c" },
+    { currentPassword: "", newPassword: "violet-anchor-harbor-71" },
+    { currentPassword: "old-password", newPassword: "violet-anchor-harbor-71", email: "a@b.c" },
   ]) {
     const res = await change(body);
     assert.equal(res.statusCode, 400, JSON.stringify(body));
@@ -111,7 +113,7 @@ test("invalid requests are rejected before touching the account", async () => {
 test("a session replaced by another login cannot change the password", async () => {
   const { updateOne } = stubAccount({ activeSessionId: "newer-session" });
 
-  const res = await change({ currentPassword: "old-password", newPassword: "new-password" });
+  const res = await change({ currentPassword: "old-password", newPassword: "violet-anchor-harbor-71" });
 
   assert.equal(res.statusCode, 401);
   assert.equal(res.body.code, "SESSION_REVOKED");
@@ -121,10 +123,26 @@ test("a session replaced by another login cannot change the password", async () 
 test("a login that lands between the check and the write wins", async () => {
   const { closedRooms } = stubAccount({ modifiedCount: 0 });
 
-  const res = await change({ currentPassword: "old-password", newPassword: "new-password" });
+  const res = await change({ currentPassword: "old-password", newPassword: "violet-anchor-harbor-71" });
 
   assert.equal(res.statusCode, 401);
   assert.equal(res.body.code, "SESSION_REVOKED");
   assert.equal(res.cookieValue, undefined);
   assert.deepEqual(closedRooms, []);
+});
+
+test("a new password is held to the password policy before anything is changed", async () => {
+  const { updateOne } = stubAccount();
+  const res = response();
+  await changePassword({
+    user: { id: userId, fullName: "Dawid Zalewski", email: "dz@example.com" },
+    sessionId: currentSid,
+    body: { currentPassword: "old-password", newPassword: "zalewski-2026-rocks" },
+    requestId: "req",
+  }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.code, "PASSWORD_PERSONAL");
+  assert.equal(res.body.field, "newPassword");
+  assert.equal(updateOne.mock.callCount(), 0);
 });

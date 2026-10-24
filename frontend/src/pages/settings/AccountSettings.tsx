@@ -4,6 +4,15 @@ import { apiService } from "@/services/apiService";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { ChangePasswordRequest } from "@/types/api";
 import { createApiError, handleStoreError } from "@/utils/errorHandling";
+import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
+import {
+  PASSWORD_MAX_LENGTH,
+  isPasswordPolicyCode,
+  loadStrengthChecker,
+  passwordProblem,
+  personalWords,
+  type PasswordAccount,
+} from "@/utils/passwordPolicy";
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -11,29 +20,39 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsSection";
 
-// Same limits as sign-up and the server.
-const PASSWORD_MIN = 6;
-const PASSWORD_MAX = 128;
-
 type Field = "current" | "next" | "confirm";
 type PasswordForm = Record<Field, string>;
 type FieldErrors = Partial<Record<Field, string>>;
 
 const EMPTY_FORM: PasswordForm = { current: "", next: "", confirm: "" };
 
-function validatePasswordForm({ current, next, confirm }: PasswordForm): FieldErrors {
+// The same rules as sign-up; `score` is left out when the strength checker
+// couldn't load, and the server judges strength instead.
+function validatePasswordForm(
+  { current, next, confirm }: PasswordForm,
+  account: PasswordAccount,
+  score: number | undefined,
+): FieldErrors {
   const errors: FieldErrors = {};
   if (!current) errors.current = "Enter your current password.";
-  if (next.length < PASSWORD_MIN) {
-    errors.next = `Use at least ${PASSWORD_MIN} characters.`;
-  } else if (next.length > PASSWORD_MAX) {
-    errors.next = `Use ${PASSWORD_MAX} characters or fewer.`;
-  } else if (current && next === current) {
+  if (current && next === current) {
     errors.next = "Choose a password different from the current one.";
+  } else {
+    const problem = passwordProblem(next, account, score);
+    if (problem) errors.next = problem;
   }
   if (!errors.next && confirm !== next) errors.confirm = "Passwords don't match.";
   return errors;
 }
+
+const strengthOf = async (password: string, account: PasswordAccount) => {
+  try {
+    const check = await loadStrengthChecker();
+    return check(password, personalWords(account)).score;
+  } catch {
+    return undefined;
+  }
+};
 
 interface PasswordFieldProps {
   id: string;
@@ -42,12 +61,14 @@ interface PasswordFieldProps {
   error?: string;
   autoComplete: "current-password" | "new-password";
   hint?: string;
+  // Another element describing the field, such as a strength meter.
+  describedById?: string;
   inputRef?: React.Ref<HTMLInputElement>;
   onChange: (value: string) => void;
 }
 
-function PasswordField({ id, label, value, error, autoComplete, hint, inputRef, onChange }: PasswordFieldProps) {
-  const describedBy = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(" ");
+function PasswordField({ id, label, value, error, autoComplete, hint, describedById, inputRef, onChange }: PasswordFieldProps) {
+  const describedBy = [hint && `${id}-hint`, error && `${id}-error`, describedById].filter(Boolean).join(" ");
 
   return (
     <div>
@@ -61,7 +82,7 @@ function PasswordField({ id, label, value, error, autoComplete, hint, inputRef, 
         value={value}
         onChange={(event) => onChange(event.target.value)}
         autoComplete={autoComplete}
-        maxLength={PASSWORD_MAX}
+        maxLength={PASSWORD_MAX_LENGTH}
         aria-invalid={Boolean(error)}
         aria-describedby={describedBy || undefined}
         className={`auth-input pl-4 ${error ? "border-red-500 focus:ring-red-500" : ""}`}
@@ -82,6 +103,8 @@ function PasswordField({ id, label, value, error, autoComplete, hint, inputRef, 
 
 function PasswordCard() {
   const email = useAuthStore((state) => state.authUser?.email ?? "");
+  const fullName = useAuthStore((state) => state.authUser?.fullName ?? "");
+  const account = { fullName, email };
   const reconnectSocket = useAuthStore((state) => state.reconnectSocket);
   const [form, setForm] = useState<PasswordForm>(EMPTY_FORM);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -95,7 +118,7 @@ function PasswordCard() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const problems = validatePasswordForm(form);
+    const problems = validatePasswordForm(form, account, await strengthOf(form.next, account));
     setErrors(problems);
     if (Object.keys(problems).length > 0) return;
 
@@ -112,6 +135,9 @@ function PasswordCard() {
       if (error.code === "INVALID_CURRENT_PASSWORD") {
         setErrors({ current: "Current password is incorrect." });
         currentInput.current?.focus();
+      } else if (isPasswordPolicyCode(error.code)) {
+        // e.g. found in a data breach, which only the server can tell.
+        setErrors({ next: error.message });
       } else {
         handleStoreError(e, "Couldn't change your password. Try again later.");
       }
@@ -143,9 +169,10 @@ function PasswordCard() {
           value={form.next}
           error={errors.next}
           autoComplete="new-password"
-          hint={`At least ${PASSWORD_MIN} characters.`}
+          describedById="settings-new-password-strength"
           onChange={update("next")}
         />
+        <PasswordStrengthMeter id="settings-new-password-strength" password={form.next} account={account} />
         <PasswordField
           id="settings-confirm-password"
           label="Confirm new password"

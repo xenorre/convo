@@ -1,16 +1,24 @@
 import { z } from "zod";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "#services/password.service.js";
+
+// Length only; the rest of the password policy (personal words, strength,
+// breaches) needs the account and the network, so the service checks it.
+const newPassword = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH, `Use at least ${PASSWORD_MIN_LENGTH} characters`)
+  .max(PASSWORD_MAX_LENGTH, `Use at most ${PASSWORD_MAX_LENGTH} characters`);
 
 export const signUpSchema = z.object({
-  fullName: z.string().trim().min(2).max(255),
-  email: z.email().max(255).toLowerCase().trim(),
-  password: z.string().min(6).max(128),
+  // Same limits as changing the name in Settings.
+  fullName: z.string().trim().min(2, "Use at least 2 characters").max(50, "Use at most 50 characters"),
+  email: z.email("Enter a valid email address").max(254).toLowerCase().trim(),
+  password: newPassword,
 });
 
-// Same length rules as sign-up for the new password.
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1),
-    newPassword: z.string().min(6).max(128),
+    newPassword,
   })
   .strict()
   .refine((data) => data.newPassword !== data.currentPassword, {

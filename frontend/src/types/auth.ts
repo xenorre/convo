@@ -34,7 +34,9 @@ export interface AuthState {
   socket: AppSocket | null;
   onlineUsers: string[];
   checkAuth: () => Promise<void>;
-  signUp: (data: SignUpData) => Promise<void>;
+  // Resolves with the server's reason when it refuses the password, so the
+  // form can show it on the field; other failures are reported as toasts.
+  signUp: (data: SignUpData) => Promise<{ code: string; message: string } | null>;
 
   login: (data: LoginData) => Promise<void>;
   logout: () => Promise<void>;

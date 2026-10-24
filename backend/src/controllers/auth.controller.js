@@ -4,6 +4,7 @@ import {
   signUpSchema,
 } from "#validations/auth.validation.js";
 import { formatValidationError } from "#utils/format.js";
+import { PASSWORD_POLICY_MESSAGES, passwordPolicyError } from "#services/password.service.js";
 import {
   authenticateUser,
   changeUserPassword,
@@ -35,6 +36,16 @@ const startUserSession = async (user, res) => {
   cookies.set(res, "token", token);
 };
 
+// A password the policy refuses: the message says what to change, and
+// `field` tells the form where to show it.
+const rejectPassword = (req, res, code, field) =>
+  res.status(400).json({
+    error: PASSWORD_POLICY_MESSAGES[code],
+    code,
+    field,
+    requestId: req.requestId,
+  });
+
 export const signUp = async (req, res, next) => {
   try {
     const validationResult = signUpSchema.safeParse(req.body);
@@ -48,6 +59,9 @@ export const signUp = async (req, res, next) => {
     }
 
     const { fullName, email, password } = validationResult.data;
+
+    const policyError = await passwordPolicyError(password, { fullName, email });
+    if (policyError) return rejectPassword(req, res, policyError, "password");
 
     const user = await createUser({ fullName, email, password });
 
@@ -145,6 +159,12 @@ export const changePassword = async (req, res) => {
         requestId: req.requestId,
       });
     }
+
+    const policyError = await passwordPolicyError(validationResult.data.newPassword, {
+      fullName: req.user.fullName,
+      email: req.user.email,
+    });
+    if (policyError) return rejectPassword(req, res, policyError, "newPassword");
 
     const userId = req.user.id;
     const nextSessionId = createSessionId();

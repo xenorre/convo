@@ -311,7 +311,8 @@ test("signup starts a session without returning its ID in the user payload", asy
     return { select: () => Promise.resolve({ activeSessionId: undefined }) };
   });
   const res = response();
-  await signUp({ body: { fullName: "New User", email: "new@example.com", password: "test-password" } }, res);
+  mock.method(globalThis, "fetch", async () => new Response("", { status: 200 }));
+  await signUp({ body: { fullName: "New User", email: "new@example.com", password: "violet-anchor-harbor-71" } }, res);
   assert.equal(res.statusCode, 201);
   assert.equal(jwttoken.verify(res.cookieValue.value).sid, savedSession);
   assert.equal(res.body.user.activeSessionId, undefined);

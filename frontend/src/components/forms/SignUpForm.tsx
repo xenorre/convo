@@ -1,9 +1,19 @@
 import { Link } from "react-router";
 import { useState } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
-import { LoaderCircle, LockIcon, MailIcon, UserIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, LoaderCircle, LockIcon, MailIcon, UserIcon } from "lucide-react";
 import { validateEmail, sanitizeInput } from "@/utils/sanitize";
 import toast from "react-hot-toast";
+import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
+import {
+  PASSWORD_MAX_LENGTH,
+  loadStrengthChecker,
+  passwordProblem,
+  personalWords,
+} from "@/utils/passwordPolicy";
+
+// Same limits as the server and as changing the name in Settings.
+const NAME_MAX_LENGTH = 50;
 
 function SignUpForm() {
   const [formData, setFormData] = useState({
@@ -16,9 +26,21 @@ function SignUpForm() {
     email?: string;
     password?: string;
   }>({});
+  const [showPassword, setShowPassword] = useState(false);
   const { signUp, isSigningUp } = useAuthStore();
+  const account = { fullName: formData.fullName, email: formData.email };
 
-  const validateForm = () => {
+  // Strength needs the checker; if it can't load, the server still decides.
+  const strengthOf = async (password: string) => {
+    try {
+      const check = await loadStrengthChecker();
+      return check(password, personalWords(account)).score;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const validateForm = async () => {
     const newErrors: { fullName?: string; email?: string; password?: string } =
       {};
 
@@ -26,6 +48,8 @@ function SignUpForm() {
       newErrors.fullName = "Full name is required";
     } else if (formData.fullName.trim().length < 2) {
       newErrors.fullName = "Full name must be at least 2 characters";
+    } else if (formData.fullName.trim().length > NAME_MAX_LENGTH) {
+      newErrors.fullName = `Full name must be at most ${NAME_MAX_LENGTH} characters`;
     }
 
     if (!formData.email) {
@@ -36,18 +60,19 @@ function SignUpForm() {
 
     if (!formData.password) {
       newErrors.password = "Password is required";
-    } else if (formData.password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
+    } else {
+      const problem = passwordProblem(formData.password, account, await strengthOf(formData.password));
+      if (problem) newErrors.password = problem;
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!validateForm()) {
+    if (!(await validateForm())) {
       toast.error("Please fix the errors below");
       return;
     }
@@ -58,7 +83,9 @@ function SignUpForm() {
       password: formData.password, // Don't sanitize passwords
     };
 
-    signUp(sanitizedData);
+    // A refused password (e.g. found in a data breach) belongs on its field.
+    const refused = await signUp(sanitizedData);
+    if (refused) setErrors((prev) => ({ ...prev, password: refused.message }));
   };
   return (
     <>
@@ -96,6 +123,7 @@ function SignUpForm() {
               className={`auth-input ${errors.fullName ? "border-red-500 focus:ring-red-500" : ""}`}
               placeholder="John Doe"
               autoComplete="name"
+              maxLength={NAME_MAX_LENGTH}
             />
           </div>
           {errors.fullName && (
@@ -156,10 +184,12 @@ function SignUpForm() {
             <input
               id="signup-password"
               name="password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               aria-invalid={Boolean(errors.password)}
               aria-describedby={
-                errors.password ? "signup-password-error" : undefined
+                errors.password
+                  ? "signup-password-error signup-password-strength"
+                  : "signup-password-strength"
               }
               value={formData.password}
               onChange={(e) => {
@@ -168,10 +198,25 @@ function SignUpForm() {
                   setErrors((prev) => ({ ...prev, password: undefined }));
                 }
               }}
-              className={`auth-input ${errors.password ? "border-red-500 focus:ring-red-500" : ""}`}
-              placeholder="••••••••"
+              className={`auth-input pr-12 ${errors.password ? "border-red-500 focus:ring-red-500" : ""}`}
+              placeholder="••••••••••••"
               autoComplete="new-password"
+              maxLength={PASSWORD_MAX_LENGTH}
             />
+            {/* Long passphrases are easier to type when they can be checked. */}
+            <button
+              type="button"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              onClick={() => setShowPassword((shown) => !shown)}
+              className="absolute right-1 top-1/2 inline-flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-slate-400 hover:text-slate-200 focus-visible:outline-2 focus-visible:outline-cyan-400"
+            >
+              {showPassword ? (
+                <EyeOffIcon className="size-5" aria-hidden="true" />
+              ) : (
+                <EyeIcon className="size-5" aria-hidden="true" />
+              )}
+            </button>
           </div>
           {errors.password && (
             <p
@@ -182,6 +227,11 @@ function SignUpForm() {
               {errors.password}
             </p>
           )}
+          <PasswordStrengthMeter
+            id="signup-password-strength"
+            password={formData.password}
+            account={account}
+          />
         </div>
 
         <button
