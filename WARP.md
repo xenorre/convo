@@ -8,7 +8,7 @@ Project overview
 - Local development defaults: frontend expects the API at http://localhost:3000 (see frontend/src/config/env.ts).
 
 Requirements
-- Node.js 20+ at the repo root; backend supports Node 18+ but root engines declare >=20.
+- Node.js 24+ (the current LTS) for the root, backend and frontend.
 - MongoDB connection URL for the backend.
 
 Common commands

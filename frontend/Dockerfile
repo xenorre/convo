@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- Build stage ---
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 
 # Allow overriding API/WS URLs at build time (Vite reads VITE_* at build)
@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build
 
 # --- Runtime stage ---
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30-alpine AS runtime
 
 # Nginx config serves SPA and proxies API + Socket.IO to backend
 COPY nginx.conf /etc/nginx/conf.d/default.conf

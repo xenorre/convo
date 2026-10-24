@@ -56,7 +56,7 @@
   "license": "ISC",
   "type": "module",
   "engines": {
-    "node": ">=20.20"
+    "node": ">=24"
   },
   "bugs": {
     "url": "https://github.com/xenorre/convo-backend/issues"

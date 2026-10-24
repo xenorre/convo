@@ -7,7 +7,7 @@ A real-time chat application monorepo.
 
 ## Requirements
 
-- Node.js >= 20 (repo root)
+- Node.js >= 24 (current LTS)
 - MongoDB (local or remote)
 - Redis (optional; enables Socket.IO scaling + presence)
 - Docker & Docker Compose (optional, for containerized dev/prod)

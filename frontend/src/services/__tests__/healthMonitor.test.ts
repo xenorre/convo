@@ -21,16 +21,15 @@ describe('optional health monitoring', () => {
     telemetryEnv.metricsEndpoint = '';
     telemetryEnv.healthEndpoint = '';
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
-    vi.stubGlobal('performance', {
-      getEntriesByType: vi.fn(() => [{
-        loadEventEnd: 1500,
-        loadEventStart: 1490,
-        duration: 1500,
-        domContentLoadedEventEnd: 900,
-        domComplete: 1400,
-        responseStart: 200,
-      }]),
-    });
+    // Only the navigation entry is faked; Vitest itself needs performance.now().
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{
+      loadEventEnd: 1500,
+      loadEventStart: 1490,
+      duration: 1500,
+      domContentLoadedEventEnd: 900,
+      domComplete: 1400,
+      responseStart: 200,
+    }] as unknown as PerformanceEntryList);
     vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
   });
 

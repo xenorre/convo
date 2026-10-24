@@ -19,7 +19,7 @@ Production-ready Node.js/Express API with MongoDB and Socket.IO for real-time me
 
 ## Tech Stack
 
-- Node 20, Express 5, Mongoose, Socket.IO
+- Node 24, Express 5, Mongoose, Socket.IO
 - JWT, bcrypt, cookie-parser, helmet, cors
 - Winston + morgan for logging
 - Zod for environment validation
