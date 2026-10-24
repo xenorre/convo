@@ -101,6 +101,8 @@ export const authenticateUser = async ({ email, password }) => {
       email: user.email,
       fullName: user.fullName,
       profilePic: user.profilePic,
+      // null: not confirmed yet; missing: an account from before confirmation.
+      emailVerifiedAt: user.emailVerifiedAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

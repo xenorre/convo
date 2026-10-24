@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { render as renderPlain, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import userEvent from '@testing-library/user-event';
 import { render } from '@/test/utils';
 import { loadStrengthChecker } from '@/utils/passwordPolicy';
@@ -55,7 +56,7 @@ describe('SignUpForm', () => {
 
   it('signs up with a good password and shows a server refusal on the field', async () => {
     const user = userEvent.setup();
-    signUp.mockResolvedValue({ code: 'PASSWORD_BREACHED', message: 'This password has appeared in a data breach' });
+    signUp.mockResolvedValue({ kind: 'refused', code: 'PASSWORD_BREACHED', message: 'This password has appeared in a data breach' });
     render(<SignUpForm />);
 
     await fill(user, STRONG);
@@ -82,5 +83,23 @@ describe('SignUpForm', () => {
     expect(screen.getByLabelText('Full Name')).toHaveAttribute('maxLength', '50');
     await user.click(screen.getByRole('button', { name: 'Create Account' }));
     expect(screen.getByLabelText('Full Name')).toHaveAccessibleDescription('Full name is required');
+  });
+
+  it('goes to "check your email" once the account is created', async () => {
+    const user = userEvent.setup();
+    signUp.mockResolvedValue({ kind: 'verify', email: 'dawid@example.com', emailSent: true });
+    const CheckEmailProbe = () => <p>Check page for {(useLocation().state as { email: string }).email}</p>;
+    renderPlain(
+      <MemoryRouter initialEntries={['/sign-up']}>
+        <Routes>
+          <Route path="/sign-up" element={<SignUpForm />} />
+          <Route path="/check-email" element={<CheckEmailProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await fill(user, STRONG);
+
+    expect(await screen.findByText('Check page for dawid@example.com')).toBeInTheDocument();
   });
 });

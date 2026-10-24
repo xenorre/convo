@@ -1,6 +1,6 @@
 import { useAuthStore } from "@/store/useAuthStore";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { LoaderCircle, LockIcon, MailIcon } from "lucide-react";
 import PasswordVisibilityToggle from "./PasswordVisibilityToggle";
 import { validateEmail, sanitizeInput } from "@/utils/sanitize";
@@ -16,6 +16,7 @@ function LoginForm() {
     {},
   );
   const { login, isLoggingIn } = useAuthStore();
+  const navigate = useNavigate();
 
   const validateForm = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -36,7 +37,7 @@ function LoginForm() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!validateForm()) {
@@ -49,7 +50,10 @@ function LoginForm() {
       password: formData.password, // Don't sanitize passwords
     };
 
-    login(sanitizedData);
+    const outcome = await login(sanitizedData);
+    if (outcome) {
+      navigate("/check-email", { state: { email: outcome.unverifiedEmail, notConfirmed: true } });
+    }
   };
   return (
     <>

@@ -1,8 +1,15 @@
 import {
   changePasswordSchema,
+  resendVerificationSchema,
   signInSchema,
   signUpSchema,
+  verifyEmailSchema,
 } from "#validations/auth.validation.js";
+import {
+  confirmEmail,
+  issueVerification,
+  resendVerification,
+} from "#services/emailVerification.service.js";
 import { formatValidationError } from "#utils/format.js";
 import { PASSWORD_POLICY_MESSAGES, passwordPolicyError } from "#services/password.service.js";
 import {
@@ -65,33 +72,33 @@ export const signUp = async (req, res, next) => {
 
     const user = await createUser({ fullName, email, password });
 
-    if (user) {
-      await startUserSession(user, res);
-    } else {
+    if (!user) {
       return res
         .status(400)
         .json({ error: "Unable to create user", requestId: req.requestId });
     }
 
-    // Respond first
-    res.status(201).json({
-      message: "User registered successfully",
-      user: {
-        email: user.email,
-        profilePic: user.profilePic,
-        fullName: user.fullName,
-      },
-      requestId: req.requestId,
-    });
-
-    // Fire-and-forget email; never affects the response
-    sendWelcomeEmail(user.email, user.fullName, ENV.CLIENT_URL).catch((err) =>
-      logger.error("Error sending welcome email", {
+    // No session until the email is confirmed. A failed send isn't fatal:
+    // the "check your email" screen says so and can ask for another link.
+    let emailSent = true;
+    try {
+      await issueVerification(user);
+    } catch (err) {
+      emailSent = false;
+      logger.error("Error sending confirmation email", {
         requestId: req.requestId,
         email: user.email,
         error: err.message,
-      })
-    );
+      });
+    }
+
+    res.status(201).json({
+      message: "Account created. Confirm your email to sign in.",
+      status: "verification_required",
+      email: user.email,
+      emailSent,
+      requestId: req.requestId,
+    });
   } catch (e) {
     if (e.message === "Email already in use") {
       return res
@@ -123,6 +130,17 @@ export const login = async (req, res) => {
 
     const { email, password } = validationResult.data;
     const user = await authenticateUser({ email, password });
+
+    // Only said after the right password, so it reveals nothing to a guesser.
+    // 403, not 401: the client treats every 401 as a signed-out session.
+    if (user.emailVerifiedAt === null) {
+      return res.status(403).json({
+        error: "Confirm your email to sign in. We can send you a new link.",
+        code: "EMAIL_NOT_VERIFIED",
+        email: user.email,
+        requestId: req.requestId,
+      });
+    }
 
     await startUserSession(user, res);
 
@@ -209,6 +227,68 @@ export const changePassword = async (req, res) => {
       .status(500)
       .json({ error: "Internal server error", requestId: req.requestId });
   }
+};
+
+// The link from the confirmation email: confirms the address once and signs
+// the user in, like a login. The welcome email goes out now.
+export const verifyEmail = async (req, res) => {
+  const parsed = verifyEmailSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: "This link is invalid or has expired",
+      code: "VERIFICATION_INVALID",
+      requestId: req.requestId,
+    });
+  }
+
+  try {
+    const user = await confirmEmail(parsed.data.token);
+    if (!user) {
+      return res.status(400).json({
+        error: "This link is invalid or has expired",
+        code: "VERIFICATION_INVALID",
+        requestId: req.requestId,
+      });
+    }
+
+    const sessionUser = { id: String(user._id), email: user.email, fullName: user.fullName, profilePic: user.profilePic };
+    await startUserSession(sessionUser, res);
+    res.status(200).json({
+      message: "Email confirmed",
+      user: { ...sessionUser, _id: sessionUser.id },
+      requestId: req.requestId,
+    });
+
+    sendWelcomeEmail(user.email, user.fullName, ENV.CLIENT_URL).catch((err) =>
+      logger.error("Error sending welcome email", {
+        requestId: req.requestId,
+        email: user.email,
+        error: err.message,
+      })
+    );
+  } catch (e) {
+    logger.error("Error confirming email", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+// Always the same answer, whether or not a link was sent, so it can't be
+// used to find out which emails have accounts.
+export const resendVerificationEmail = async (req, res) => {
+  const parsed = resendVerificationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Enter a valid email address", requestId: req.requestId });
+  }
+
+  try {
+    await resendVerification(parsed.data.email);
+  } catch (e) {
+    logger.error("Error resending confirmation email", { requestId: req.requestId, error: e.message });
+  }
+  res.status(200).json({
+    message: "If that account still needs confirming, a new link is on its way.",
+    requestId: req.requestId,
+  });
 };
 
 export const logout = async (req, res) => {

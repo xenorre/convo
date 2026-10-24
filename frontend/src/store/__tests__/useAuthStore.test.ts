@@ -280,3 +280,62 @@ describe('session termination', () => {
     expect(useAuthStore.getState().isCheckingAuth).toBe(false);
   });
 });
+
+describe('email confirmation', () => {
+  it('sign-up waits for the email to be confirmed instead of signing in', async () => {
+    vi.mocked(apiService.post).mockResolvedValueOnce({ status: 'verification_required', email: 'new@example.com' });
+
+    const outcome = await useAuthStore.getState().signUp({ fullName: 'New', email: 'new@example.com', password: 'x' });
+
+    expect(outcome).toEqual({ kind: 'verify', email: 'new@example.com', emailSent: true });
+    expect(useAuthStore.getState().authUser).toBeNull();
+    expect(apiService.get).not.toHaveBeenCalled();
+    expect(io).not.toHaveBeenCalled();
+  });
+
+  it('passes on that the first email could not be sent', async () => {
+    vi.mocked(apiService.post).mockResolvedValueOnce({ status: 'verification_required', email: 'new@example.com', emailSent: false });
+
+    const outcome = await useAuthStore.getState().signUp({ fullName: 'New', email: 'new@example.com', password: 'x' });
+
+    expect(outcome).toEqual({ kind: 'verify', email: 'new@example.com', emailSent: false });
+  });
+
+  it('a login that needs confirming says so instead of showing an error', async () => {
+    vi.mocked(apiService.post).mockRejectedValueOnce({
+      status: 403, code: 'EMAIL_NOT_VERIFIED', message: 'Confirm your email to sign in.',
+    });
+
+    const outcome = await useAuthStore.getState().login({ email: 'ann@example.com', password: 'right' });
+
+    expect(outcome).toEqual({ unverifiedEmail: 'ann@example.com' });
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(useAuthStore.getState().authUser).toBeNull();
+  });
+
+  it('a confirmed link signs in and connects', async () => {
+    vi.mocked(apiService.post).mockResolvedValueOnce({ user });
+
+    expect(await useAuthStore.getState().verifyEmail('token')).toBe(true);
+
+    expect(apiService.post).toHaveBeenCalledWith('/auth/verify-email', { token: 'token' });
+    expect(useAuthStore.getState().authUser).toEqual(user);
+    await vi.waitFor(() => expect(io).toHaveBeenCalled());
+  });
+
+  it('a broken link leaves whoever is signed in alone', async () => {
+    useAuthStore.setState({ authUser: user, isCheckingAuth: false });
+    vi.mocked(apiService.post).mockRejectedValueOnce({ status: 400, code: 'VERIFICATION_INVALID', message: 'x' });
+
+    expect(await useAuthStore.getState().verifyEmail('used-token')).toBe(false);
+    expect(useAuthStore.getState().authUser).toEqual(user);
+  });
+
+  it('a broken link signs nobody in and stays quiet', async () => {
+    vi.mocked(apiService.post).mockRejectedValueOnce({ status: 400, code: 'VERIFICATION_INVALID', message: 'x' });
+
+    expect(await useAuthStore.getState().verifyEmail('token')).toBe(false);
+    expect(useAuthStore.getState().authUser).toBeNull();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+});

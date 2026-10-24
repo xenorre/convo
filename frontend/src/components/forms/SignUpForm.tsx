@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useState } from "react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { LoaderCircle, LockIcon, MailIcon, UserIcon } from "lucide-react";
@@ -29,6 +29,7 @@ function SignUpForm() {
   }>({});
   const [showPassword, setShowPassword] = useState(false);
   const { signUp, isSigningUp } = useAuthStore();
+  const navigate = useNavigate();
   const account = { fullName: formData.fullName, email: formData.email };
 
   // Strength needs the checker; if it can't load, the server still decides.
@@ -84,9 +85,13 @@ function SignUpForm() {
       password: formData.password, // Don't sanitize passwords
     };
 
-    // A refused password (e.g. found in a data breach) belongs on its field.
-    const refused = await signUp(sanitizedData);
-    if (refused) setErrors((prev) => ({ ...prev, password: refused.message }));
+    const outcome = await signUp(sanitizedData);
+    if (outcome?.kind === "verify") {
+      navigate("/check-email", { state: { email: outcome.email, emailSent: outcome.emailSent } });
+    } else if (outcome?.kind === "refused") {
+      // e.g. found in a data breach, which only the server can tell.
+      setErrors((prev) => ({ ...prev, password: outcome.message }));
+    }
   };
   return (
     <>

@@ -20,6 +20,13 @@ const users = new mongoose.Schema(
       type: String,
       select: false,
     },
+    // Set when the owner opened the confirmation link; null means the
+    // account can't sign in yet. Accounts from before email confirmation
+    // were marked confirmed by a migration.
+    emailVerifiedAt: {
+      type: Date,
+      default: null,
+    },
     profilePic: {
       type: String,
       default:

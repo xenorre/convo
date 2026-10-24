@@ -11,6 +11,8 @@ import { registerAppNavigate } from "./utils/appNavigation";
 
 const ChatPage = lazy(() => import("@/pages/ChatPage"));
 const SignUp = lazy(() => import("@/pages/SignUp"));
+const CheckEmail = lazy(() => import("@/pages/CheckEmail"));
+const VerifyEmail = lazy(() => import("@/pages/VerifyEmail"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const ProfileSettings = lazy(() => import("@/pages/settings/ProfileSettings"));
 const AccountSettings = lazy(() => import("@/pages/settings/AccountSettings"));
@@ -60,6 +62,25 @@ function App() {
                     <SignUp />
                   </Suspense>
                 </PublicRoute>
+              }
+            />
+            <Route
+              path="/check-email"
+              element={
+                <PublicRoute>
+                  <Suspense fallback={<PageLoader />}>
+                    <CheckEmail />
+                  </Suspense>
+                </PublicRoute>
+              }
+            />
+            {/* Not a PublicRoute: the link signs in even if someone else was. */}
+            <Route
+              path="/verify-email"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <VerifyEmail />
+                </Suspense>
               }
             />
             <Route

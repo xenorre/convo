@@ -129,3 +129,34 @@ describe('LoginForm password visibility', () => {
     expect(password).toHaveAttribute('type', 'password');
   });
 });
+
+describe('LoginForm with an unconfirmed email', () => {
+  it('sends the user to confirm their email first', async () => {
+    const { MemoryRouter, Route, Routes, useLocation } = await import('react-router');
+    const { render: renderPlain } = await import('@testing-library/react');
+    const store = await import('@/store/useAuthStore');
+    vi.spyOn(store, 'useAuthStore').mockReturnValue({
+      login: vi.fn(async () => ({ unverifiedEmail: 'ann@example.com' })),
+      isLoggingIn: false,
+    } as never);
+    const Probe = () => {
+      const state = useLocation().state as { email: string; notConfirmed: boolean };
+      return <p>{`confirm ${state.email} ${state.notConfirmed}`}</p>;
+    };
+    const user = userEvent.setup();
+    renderPlain(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<LoginForm />} />
+          <Route path="/check-email" element={<Probe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await user.type(screen.getByLabelText('Email'), 'ann@example.com');
+    await user.type(screen.getByLabelText('Password'), 'right-password');
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText('confirm ann@example.com true')).toBeInTheDocument();
+  });
+});

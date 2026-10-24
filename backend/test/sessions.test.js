@@ -11,6 +11,7 @@ process.env.RESEND_API_KEY = "";
 process.env.LOG_TO_FILES = "false";
 
 const { default: User } = await import("../src/models/user.model.js");
+const { default: EmailVerification } = await import("../src/models/emailVerification.model.js");
 const { default: logger } = await import("../src/config/logger.js");
 const { jwttoken } = await import("../src/utils/jwt.js");
 const { cookies } = await import("../src/utils/cookies.js");
@@ -45,6 +46,7 @@ const makeUser = (sid = "current") => new User({
   fullName: "Test User",
   password: "password-hash",
   activeSessionId: sid,
+  emailVerifiedAt: new Date("2026-10-01T00:00:00Z"),
 });
 
 const response = () => ({
@@ -302,21 +304,46 @@ test("login issues a JWT bound to the newly saved session and revokes only the p
   assert.equal(res.body.user.password, undefined);
 });
 
-test("signup starts a session without returning its ID in the user payload", async () => {
+test("signup creates an unconfirmed account without a session and sends a confirmation link", async () => {
   mock.method(User, "findOne", async () => null);
-  mock.method(User.prototype, "save", async function () { return this; });
-  let savedSession;
-  mock.method(User, "findByIdAndUpdate", (id, update) => {
-    savedSession = update.$set.activeSessionId;
-    return { select: () => Promise.resolve({ activeSessionId: undefined }) };
-  });
-  const res = response();
+  let saved;
+  mock.method(User.prototype, "save", async function () { saved = this; return this; });
+  mock.method(User, "findByIdAndUpdate", () => assert.fail("no session before the email is confirmed"));
+  const pending = mock.method(EmailVerification, "findOneAndUpdate", async () => ({}));
   mock.method(globalThis, "fetch", async () => new Response("", { status: 200 }));
+  const res = response();
   await signUp({ body: { fullName: "New User", email: "new@example.com", password: "violet-anchor-harbor-71" } }, res);
   assert.equal(res.statusCode, 201);
-  assert.equal(jwttoken.verify(res.cookieValue.value).sid, savedSession);
-  assert.equal(res.body.user.activeSessionId, undefined);
-  assert.equal(res.body.user.password, undefined);
+  assert.equal(res.body.status, "verification_required");
+  assert.equal(res.body.email, "new@example.com");
+  // No RESEND_API_KEY in tests: the account exists, and the client is told
+  // the email didn't go out so it can offer another try.
+  assert.equal(res.body.emailSent, false);
+  assert.equal(res.body.user, undefined);
+  assert.equal(res.cookieValue, undefined);
+  assert.equal(saved.emailVerifiedAt, null);
+  assert.equal(String(pending.mock.calls[0].arguments[0].userId), String(saved._id));
+});
+
+test("an unconfirmed account can't log in, but is told so only after the right password", async () => {
+  const user = makeUser("previous");
+  user.emailVerifiedAt = null;
+  mock.method(User, "findOne", async () => user);
+  mock.method(User, "findByIdAndUpdate", () => assert.fail("no session for an unconfirmed account"));
+
+  mock.method(bcrypt, "compare", async () => false);
+  const wrong = response();
+  await login({ body: { email: user.email, password: "guess" } }, wrong);
+  assert.equal(wrong.statusCode, 401);
+  assert.equal(wrong.body.code, undefined);
+
+  bcrypt.compare.mock.mockImplementation(async () => true);
+  const right = response();
+  await login({ body: { email: user.email, password: "test-password" } }, right);
+  assert.equal(right.statusCode, 403);
+  assert.equal(right.body.code, "EMAIL_NOT_VERIFIED");
+  assert.equal(right.body.email, user.email);
+  assert.equal(right.cookieValue, undefined);
 });
 
 test("delayed logout from a replaced session cannot revoke the new session's sockets", async () => {

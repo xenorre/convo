@@ -2,6 +2,7 @@ import axios from 'axios';
 import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { env } from '../config/env';
 import { logger } from './logger';
+import { redactSecrets } from '@/utils/redact';
 import {
   getAuthSessionVersion,
   isCurrentAuthSession,
@@ -69,10 +70,10 @@ export class ApiService {
         if (env.isDevelopment) {
           logger.info(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
             component: 'ApiService',
-            metadata: {
+            metadata: redactSecrets({
               headers: config.headers,
               data: config.data,
-            },
+            }) as Record<string, unknown>,
           });
         }
 
@@ -97,9 +98,9 @@ export class ApiService {
         if (env.isDevelopment) {
           logger.info(`✅ API Response: ${response.status} ${response.config.url}`, {
             component: 'ApiService',
-            metadata: {
+            metadata: redactSecrets({
               data: response.data,
-            },
+            }) as Record<string, unknown>,
           });
         }
 

@@ -25,6 +25,11 @@ export interface LoginData {
   password: string;
 }
 
+export type SignUpOutcome =
+  | { kind: "verify"; email: string; emailSent: boolean }
+  | { kind: "refused"; code: string; message: string }
+  | null;
+
 export interface AuthState {
   authUser: AuthUser | null;
   isCheckingAuth: boolean;
@@ -34,11 +39,16 @@ export interface AuthState {
   socket: AppSocket | null;
   onlineUsers: string[];
   checkAuth: () => Promise<void>;
-  // Resolves with the server's reason when it refuses the password, so the
-  // form can show it on the field; other failures are reported as toasts.
-  signUp: (data: SignUpData) => Promise<{ code: string; message: string } | null>;
+  // "verify": the account exists and waits for its email to be confirmed.
+  // "refused": the server's reason for refusing the password, for its field.
+  // null: something else failed, already reported as a toast.
+  signUp: (data: SignUpData) => Promise<SignUpOutcome>;
 
-  login: (data: LoginData) => Promise<void>;
+  // Resolves with the email when the account still needs confirming.
+  login: (data: LoginData) => Promise<{ unverifiedEmail: string } | null>;
+  // Confirms the email from the emailed link and signs in; false if the
+  // link is invalid, used or expired.
+  verifyEmail: (token: string) => Promise<boolean>;
   logout: () => Promise<void>;
   // Applies a profile change returned by the server to the signed-in user.
   updateAuthUser: (user: AuthUser) => void;

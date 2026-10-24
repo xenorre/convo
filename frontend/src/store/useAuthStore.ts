@@ -79,20 +79,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     get().disconnectSocket();
     set({ authUser: null, isSigningUp: true, isCheckingAuth: false });
     try {
-      await apiService.post<AuthResponse>('/auth/sign-up', data);
+      // No session yet: the account waits for its email to be confirmed.
+      const response = await apiService.post<{ email?: string; emailSent?: boolean }>('/auth/sign-up', data);
       if (!isCurrentAuthSession(sessionVersion)) return null;
-
-      // Re-check the account to use the canonical server user and IDs.
-      await get().checkAuth();
-      if (isCurrentAuthSession(sessionVersion) && get().authUser) {
-        toast.success('Account created successfully');
-      }
-      return null;
+      return { kind: 'verify', email: response.email ?? data.email, emailSent: response.emailSent !== false };
     } catch (e: unknown) {
       if (!isCurrentAuthSession(sessionVersion)) return null;
       const apiError = createApiError(e);
       if (apiError.code && isPasswordPolicyCode(apiError.code)) {
-        return { code: apiError.code, message: apiError.message };
+        return { kind: 'refused', code: apiError.code, message: apiError.message };
       }
       handleStoreError(e, 'Failed to create account');
       return null;
@@ -108,16 +103,42 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ authUser: null, isLoggingIn: true, isCheckingAuth: false });
     try {
       const response = await apiService.post<AuthResponse>('/auth/login', data);
-      if (!isCurrentAuthSession(sessionVersion)) return;
+      if (!isCurrentAuthSession(sessionVersion)) return null;
       const userData = response.user || response;
       set({ authUser: userData });
 
       toast.success('Logged in successfully');
       get().connectSocket();
+      return null;
     } catch (e: unknown) {
-      if (isCurrentAuthSession(sessionVersion)) handleStoreError(e, 'Login failed');
+      if (!isCurrentAuthSession(sessionVersion)) return null;
+      // The right password for an account whose email isn't confirmed yet.
+      if (createApiError(e).code === 'EMAIL_NOT_VERIFIED') return { unverifiedEmail: data.email };
+      handleStoreError(e, 'Login failed');
+      return null;
     } finally {
       if (isCurrentAuthSession(sessionVersion)) set({ isLoggingIn: false });
+    }
+  },
+
+  // Whoever is signed in stays signed in unless the link works: an old or
+  // used link must not sign anyone out.
+  verifyEmail: async token => {
+    if (pendingLogout) await pendingLogout;
+    const requestVersion = getAuthSessionVersion();
+    try {
+      const response = await apiService.post<AuthResponse>('/auth/verify-email', { token });
+      if (!isCurrentAuthSession(requestVersion)) return false;
+      // The server has moved this browser to the confirmed account's session.
+      advanceAuthSession();
+      get().disconnectSocket();
+      set({ authUser: response.user || response, isCheckingAuth: false });
+      toast.success('Email confirmed. Welcome to Convo!');
+      get().connectSocket();
+      return true;
+    } catch {
+      // The page explains an invalid or expired link itself.
+      return false;
     }
   },
 
