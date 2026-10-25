@@ -21,6 +21,7 @@ const { default: ChatHide } = await import("../src/models/chatHide.model.js");
 const { default: ChatDeletion } = await import("../src/models/chatDeletion.model.js");
 const { default: EmailVerification } = await import("../src/models/emailVerification.model.js");
 const { default: PasswordReset } = await import("../src/models/passwordReset.model.js");
+const { default: EmailChange } = await import("../src/models/emailChange.model.js");
 const { default: logger } = await import("../src/config/logger.js");
 const { resendClient } = await import("../src/config/resend.js");
 const { deleteMyAccount, exportMyData } = await import("../src/controllers/account.controller.js");
@@ -88,7 +89,7 @@ const stubAnn = ({ modifiedCount = 1 } = {}) => {
   for (const model of [Friendship, Block, ChatMute, ChatHide, ChatDeletion]) {
     mock.method(model, "deleteMany", async (filter) => { removed.push([model.modelName, filter]); return {}; });
   }
-  for (const model of [EmailVerification, PasswordReset]) {
+  for (const model of [EmailVerification, PasswordReset, EmailChange]) {
     mock.method(model, "deleteOne", async (filter) => { removed.push([model.modelName, filter]); return {}; });
   }
   return { emptied, messageUpdates, removed };
@@ -135,7 +136,7 @@ test("deleting empties the account, removes what was theirs and signs out everyw
   assert.deepEqual(messageUpdates.mock.calls[1].arguments[1], { $unset: { image: 1 } });
 
   assert.deepEqual(removed.map(([name]) => name).sort(), [
-    "Block", "ChatDeletion", "ChatHide", "ChatMute", "EmailVerification", "Friendship", "PasswordReset",
+    "Block", "ChatDeletion", "ChatHide", "ChatMute", "EmailChange", "EmailVerification", "Friendship", "PasswordReset",
   ]);
 
   assert.deepEqual(disconnected, [userRoom(annId)]);

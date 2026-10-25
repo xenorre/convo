@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Loader2Icon, UserRoundIcon } from "lucide-react";
+import { Link } from "react-router";
 import toast from "react-hot-toast";
 import { apiService } from "@/services/apiService";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -222,8 +223,11 @@ function ProfileSettings() {
     <SettingsSection title="Profile" description="How others see you in Convo">
       <PhotoCard />
       <NameCard />
-      <SettingsCard title="Email" description="Used to sign in. Changing it isn't available yet.">
+      <SettingsCard title="Email" description="Used to sign in. Only you can see it.">
         <p className="break-all text-sm text-slate-200">{email}</p>
+        <Link to="/settings/account" className={`${secondaryButtonClass} mt-3`}>
+          Change email
+        </Link>
       </SettingsCard>
     </SettingsSection>
   );

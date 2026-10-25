@@ -9,7 +9,7 @@ import type { AppSocket } from '@/types/socket';
 import AccountSettings from '../AccountSettings';
 import { loadStrengthChecker } from '@/utils/passwordPolicy';
 
-vi.mock('@/services/apiService', () => ({ apiService: { put: vi.fn(), post: vi.fn(), get: vi.fn() } }));
+vi.mock('@/services/apiService', () => ({ apiService: { put: vi.fn(), post: vi.fn(), get: vi.fn(), delete: vi.fn() } }));
 vi.mock('react-hot-toast', () => ({
   default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }),
 }));
@@ -40,6 +40,7 @@ describe('Account settings', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(apiService.get).mockResolvedValue({ email: account.email, pending: null });
     useAuthStore.setState({ authUser: account, reconnectSocket, logout });
   });
 
@@ -180,11 +181,82 @@ describe('Account settings', () => {
   });
 });
 
+describe('changing the email', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(apiService.get).mockResolvedValue({ email: account.email, pending: null });
+    useAuthStore.setState({ authUser: account });
+  });
+
+  const requestChange = async (user: ReturnType<typeof userEvent.setup>, newEmail: string, password: string) => {
+    if (newEmail) await user.type(screen.getByLabelText('New email'), newEmail);
+    if (password) await user.type(screen.getByLabelText('Password'), password);
+    await user.click(screen.getByRole('button', { name: /Send (confirmation|a new) link/ }));
+  };
+
+  it('sends a link to the new address and shows the change waiting for it', async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiService.post).mockResolvedValue({
+      pending: { email: 'ada.new@example.com', expiresAt: '2026-10-26T10:00:00.000Z' },
+    });
+    renderAccount();
+
+    await requestChange(user, ' Ada.New@Example.com ', 'my-password');
+
+    expect(apiService.post).toHaveBeenCalledWith('/users/me/email', { newEmail: 'ada.new@example.com', password: 'my-password' });
+    expect(await screen.findByText(/Waiting for you to confirm/)).toHaveTextContent('ada.new@example.com');
+    expect(screen.getByLabelText('New email')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Send a new link' })).toBeInTheDocument();
+  });
+
+  it('checks the address and the password before asking the server', async () => {
+    const user = userEvent.setup();
+    renderAccount();
+
+    await requestChange(user, 'ada@example.com', '');
+
+    expect(screen.getByLabelText('New email')).toHaveAccessibleDescription("That's already your email.");
+    expect(screen.getByLabelText('Password')).toHaveAccessibleDescription('Enter your password.');
+    expect(apiService.post).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's refusal on the field it is about", async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiService.post)
+      .mockRejectedValueOnce({ status: 400, code: 'EMAIL_CHANGE_INVALID_PASSWORD', message: 'Password is incorrect' })
+      .mockRejectedValueOnce({ status: 409, code: 'EMAIL_CHANGE_EMAIL_TAKEN', message: 'Another account already uses this email' });
+    renderAccount();
+
+    await requestChange(user, 'bob@example.com', 'guess');
+    expect(await screen.findByText('Password is incorrect.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Send confirmation link' }));
+    expect(await screen.findByText('Another account already uses this email.')).toBeInTheDocument();
+    expect(screen.getByLabelText('New email')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('shows a change already waiting and can cancel it', async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiService.get).mockResolvedValue({
+      email: account.email,
+      pending: { email: 'ada.new@example.com', expiresAt: '2026-10-26T10:00:00.000Z' },
+    });
+    vi.mocked(apiService.delete).mockResolvedValue({ pending: null });
+    renderAccount();
+
+    await user.click(await screen.findByRole('button', { name: 'Cancel change' }));
+
+    expect(apiService.delete).toHaveBeenCalledWith('/users/me/email/pending');
+    await waitFor(() => expect(screen.queryByText(/Waiting for you to confirm/)).toBeNull());
+  });
+});
+
 describe('your data and deleting the account', () => {
   const deleteAccount = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(apiService.get).mockResolvedValue({ email: account.email, pending: null });
     useAuthStore.setState({ authUser: account, deleteAccount });
   });
 

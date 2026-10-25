@@ -110,3 +110,13 @@ export interface MessageSendResponse {
   };
   requestId: string;
 }
+// A sign-in email change waiting for the link sent to the new address.
+export interface PendingEmailChange {
+  email: string;
+  expiresAt: string;
+}
+
+export interface EmailSettingsResponse {
+  email: string;
+  pending: PendingEmailChange | null;
+}

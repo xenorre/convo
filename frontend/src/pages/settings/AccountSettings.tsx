@@ -1,10 +1,12 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import toast from "react-hot-toast";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { apiService } from "@/services/apiService";
 import { useAuthStore } from "@/store/useAuthStore";
-import type { ChangePasswordRequest } from "@/types/api";
+import type { ChangePasswordRequest, EmailSettingsResponse, PendingEmailChange } from "@/types/api";
+import { validateEmail } from "@/utils/sanitize";
+import { formatFullTimestamp } from "@/utils/chatTimestamp";
 import { createApiError, handleStoreError } from "@/utils/errorHandling";
 import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
 import PasswordVisibilityToggle from "@/components/forms/PasswordVisibilityToggle";
@@ -100,6 +102,148 @@ function PasswordField({ id, label, value, error, autoComplete, hint, describedB
         </p>
       )}
     </div>
+  );
+}
+
+type EmailField = "newEmail" | "password";
+
+// Changing the sign-in email: the password now, then the link sent to the
+// new address. Until it is opened, the current email keeps working.
+function EmailCard() {
+  const email = useAuthStore((state) => state.authUser?.email ?? "");
+  const [pending, setPending] = useState<PendingEmailChange | null>(null);
+  const [form, setForm] = useState<Record<EmailField, string>>({ newEmail: "", password: "" });
+  const [errors, setErrors] = useState<Partial<Record<EmailField, string>>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const passwordInput = useRef<HTMLInputElement>(null);
+
+  // Read again when the email changes, e.g. confirmed on another device.
+  useEffect(() => {
+    let isCurrent = true;
+    apiService
+      .get<EmailSettingsResponse>("/users/me/email")
+      .then((settings) => {
+        if (isCurrent) setPending(settings.pending);
+      })
+      // Without it the card still works; only the waiting change isn't shown.
+      .catch(() => {});
+    return () => {
+      isCurrent = false;
+    };
+  }, [email]);
+
+  const update = (field: EmailField) => (value: string) => {
+    setForm((previous) => ({ ...previous, [field]: value }));
+    if (errors[field]) setErrors((previous) => ({ ...previous, [field]: undefined }));
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const newEmail = form.newEmail.trim().toLowerCase();
+    const problems: Partial<Record<EmailField, string>> = {};
+    if (!validateEmail(newEmail)) problems.newEmail = "Enter a valid email address.";
+    else if (newEmail === email) problems.newEmail = "That's already your email.";
+    if (!form.password) problems.password = "Enter your password.";
+    setErrors(problems);
+    if (Object.keys(problems).length > 0) return;
+
+    setIsSaving(true);
+    try {
+      const response = await apiService.post<{ pending: PendingEmailChange }>("/users/me/email", {
+        newEmail,
+        password: form.password,
+      });
+      setPending(response.pending);
+      setForm({ newEmail: "", password: "" });
+    } catch (e) {
+      const error = createApiError(e);
+      if (error.code === "EMAIL_CHANGE_INVALID_PASSWORD") {
+        setErrors({ password: `${error.message}.` });
+        passwordInput.current?.focus();
+      } else if (error.code?.startsWith("EMAIL_CHANGE_") || error.status === 400) {
+        // Taken, the same as now, or a link sent there a moment ago.
+        setErrors({ newEmail: `${error.message}.` });
+      } else {
+        handleStoreError(e, "Couldn't send the confirmation email. Try again later.");
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const cancel = async () => {
+    setIsCancelling(true);
+    try {
+      await apiService.delete("/users/me/email/pending");
+      setPending(null);
+    } catch (e) {
+      handleStoreError(e, "Couldn't cancel the change. Try again later.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  return (
+    <SettingsCard title="Email" description="You sign in with it, and it's where Convo sends account emails.">
+      <p className="break-all text-sm text-slate-200">{email}</p>
+
+      {pending && (
+        <div role="status" className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3 text-sm leading-relaxed text-slate-300">
+          <p>
+            Waiting for you to confirm <span className="font-medium text-slate-100 [overflow-wrap:anywhere]">{pending.email}</span>.
+            Open the link we sent there to finish. Until then you keep signing in with your current email.
+          </p>
+          <p className="mt-1 text-xs text-slate-400">The link works until {formatFullTimestamp(pending.expiresAt)}.</p>
+          <button
+            type="button"
+            className={`${secondaryButtonClass} mt-3`}
+            disabled={isCancelling}
+            onClick={() => void cancel()}
+          >
+            {isCancelling ? "Cancelling…" : "Cancel change"}
+          </button>
+        </div>
+      )}
+
+      <form onSubmit={submit} noValidate className="mt-4 space-y-4">
+        <div>
+          <label htmlFor="settings-new-email" className="auth-input-label">
+            New email
+          </label>
+          <input
+            id="settings-new-email"
+            type="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoComplete="email"
+            value={form.newEmail}
+            onChange={(event) => update("newEmail")(event.target.value)}
+            aria-invalid={Boolean(errors.newEmail)}
+            aria-describedby={errors.newEmail ? "settings-new-email-error" : undefined}
+            className={`auth-input pl-4 ${errors.newEmail ? "border-red-500 focus:ring-red-500" : ""}`}
+          />
+          {errors.newEmail && (
+            <p id="settings-new-email-error" role="alert" className="mt-2 text-sm text-red-300">
+              {errors.newEmail}
+            </p>
+          )}
+        </div>
+        <PasswordField
+          id="settings-email-password"
+          label="Password"
+          value={form.password}
+          error={errors.password}
+          autoComplete="current-password"
+          inputRef={passwordInput}
+          onChange={update("password")}
+        />
+        <button type="submit" className={primaryButtonClass} disabled={isSaving}>
+          {isSaving ? "Sending…" : pending ? "Send a new link" : "Send confirmation link"}
+        </button>
+      </form>
+    </SettingsCard>
   );
 }
 
@@ -314,6 +458,7 @@ function AccountSettings() {
 
   return (
     <SettingsSection title="Account" description="Password, sign-in and your data">
+      <EmailCard />
       <PasswordCard />
       <SettingsCard
         title="Session"

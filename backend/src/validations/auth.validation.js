@@ -47,6 +47,8 @@ export const resetPasswordSchema = z.object({
   password: newPassword,
 }).strict();
 
+export const confirmEmailChangeSchema = z.object({ token: resetToken }).strict();
+
 export const signInSchema = z.object({
   email: z.email().toLowerCase().trim(),
   password: z.string().min(1),

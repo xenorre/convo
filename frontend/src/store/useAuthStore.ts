@@ -298,6 +298,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           get().forceLogout(data.message || SESSION_REVOKED_MESSAGE, sessionVersion);
         }
       });
+      // Confirmed from the link, maybe on another device.
+      socket.on('account:email-changed', ({ email }) => {
+        const authUser = get().authUser;
+        if (isCurrentSocket() && authUser) set({ authUser: { ...authUser, email } });
+      });
       socket.on('connect_error', error => {
         if (!isCurrentSocket()) return;
         const data = (error as Error & { data?: { code?: string; message?: string } }).data;
@@ -334,6 +339,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!socket) return;
     socket.off('getOnlineUsers');
     socket.off('session:revoked');
+    socket.off('account:email-changed');
     socket.off('connect_error');
     socket.disconnect();
   },

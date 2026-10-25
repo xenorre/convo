@@ -487,3 +487,16 @@ describe('account deletion', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 });
+
+describe('email change from another tab or device', () => {
+  it('shows the new address as soon as the server says so', async () => {
+    const socket = createSocket();
+    vi.mocked(io).mockReturnValueOnce(socket as unknown as ReturnType<typeof io>);
+    useAuthStore.setState({ authUser: user, isCheckingAuth: false });
+    await useAuthStore.getState().connectSocket();
+
+    socket.listeners.get('account:email-changed')!({ email: 'new@example.com' });
+
+    expect(useAuthStore.getState().authUser).toEqual({ ...user, email: 'new@example.com' });
+  });
+});

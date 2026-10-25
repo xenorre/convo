@@ -9,6 +9,7 @@ import {
   forgotPassword,
   checkPasswordReset,
   resetPassword,
+  confirmEmailChangeLink,
 } from "#controllers/auth.controller.js";
 import { protectRoute } from "#src/middleware/auth.middleware.js";
 import { rateLimitPerUser } from "#src/middleware/rateLimit.middleware.js";
@@ -39,6 +40,11 @@ router.post(
   "/reset-password",
   rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 30 }),
   resetPassword
+);
+router.post(
+  "/confirm-email-change",
+  rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 30 }),
+  confirmEmailChangeLink
 );
 // Limits guessing the current password from a signed-in session.
 router.put(

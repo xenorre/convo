@@ -15,6 +15,7 @@ const CheckEmail = lazy(() => import("@/pages/CheckEmail"));
 const VerifyEmail = lazy(() => import("@/pages/VerifyEmail"));
 const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const ConfirmEmailChange = lazy(() => import("@/pages/ConfirmEmailChange"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const ProfileSettings = lazy(() => import("@/pages/settings/ProfileSettings"));
 const AccountSettings = lazy(() => import("@/pages/settings/AccountSettings"));
@@ -100,6 +101,15 @@ function App() {
               element={
                 <Suspense fallback={<PageLoader />}>
                   <ResetPassword />
+                </Suspense>
+              }
+            />
+            {/* Signed in or not: the link is often opened on another device. */}
+            <Route
+              path="/confirm-email-change"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ConfirmEmailChange />
                 </Suspense>
               }
             />

@@ -17,6 +17,12 @@ export const deleteAccountSchema = z.object({
   password: z.string().min(1, "Enter your password").max(1024),
 }).strict();
 
+export const changeEmailSchema = z.object({
+  // Trimmed before the format check, which would refuse surrounding spaces.
+  newEmail: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email address").max(254)),
+  password: z.string().min(1, "Enter your password").max(1024),
+}).strict();
+
 export const FILE_VALIDATION = {
   MAX_SIZE: 5 * 1024 * 1024, // 5MB
   ALLOWED_TYPES: ["image/jpeg", "image/jpg", "image/png", "image/webp"],

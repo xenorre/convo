@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  createEmailChangeConfirmEmail,
+  createEmailChangedEmail,
+  createEmailChangeRequestedEmail,
   createPasswordChangedEmail,
   createPasswordResetEmail,
   createVerificationEmail,
@@ -34,6 +37,12 @@ const passwordChanged = (overrides = {}) =>
     ...overrides,
   });
 
+const emailChangeEmails = () => [
+  createEmailChangeConfirmEmail({ name: "Ann", newEmail: "ann@example.com", link: "https://convo.test/confirm-email-change?token=x", expiresInHours: 24 }),
+  createEmailChangeRequestedEmail({ name: "Ann", email: "ann@example.com", newEmail: "new@example.com" }),
+  createEmailChangedEmail({ name: "Ann", email: "ann@example.com", newEmail: "new@example.com", changedAt: new Date() }),
+];
+
 const welcome = (overrides = {}) =>
   createWelcomeEmail({ name: "Ann Smith", email: "ann@example.com", appUrl: "https://convo.test", ...overrides });
 
@@ -61,7 +70,7 @@ test("anything a user typed is escaped in the HTML", () => {
 });
 
 test("every email says who it was sent to, with no placeholders or dead links left", () => {
-  for (const { html, text } of [verification(), welcome(), passwordReset(), passwordChanged()]) {
+  for (const { html, text } of [verification(), welcome(), passwordReset(), passwordChanged(), ...emailChangeEmails()]) {
     assert.match(html, /sent to ann@example\.com/);
     assert.ok(!/\{\{|\}\}/.test(html), "no template placeholders");
     assert.ok(!html.includes('href="#"'), "no dead links");
@@ -100,4 +109,14 @@ test("the password-changed notice says when, and has nothing to click", () => {
   assert.match(text, /25 October 2026 at 14:03 UTC/);
   assert.match(text, /Forgot password\?/);
   assert.ok(!/href=/.test(html));
+});
+
+test("only the email to the new address has a link; the notices to the old one have nothing to click", () => {
+  const [confirm, requested, changed] = emailChangeEmails();
+  assert.equal(confirm.html.split('href="https://convo.test/confirm-email-change?token=x"').length - 1, 2);
+  assert.match(confirm.text, /expires in 24 hours/);
+  for (const notice of [requested, changed]) {
+    assert.ok(!/href=/.test(notice.html));
+    assert.match(notice.text, /new@example\.com/);
+  }
 });

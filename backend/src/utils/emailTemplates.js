@@ -311,3 +311,103 @@ export function createAccountDeletedEmail({ name, email, deletedAt }) {
 
   return { subject, html, text };
 }
+
+export function createEmailChangeConfirmEmail({ name, newEmail, link, expiresInHours }) {
+  const hi = escapeHtml(firstName(name));
+  const expiry = duration(expiresInHours * 60);
+  const subject = "Confirm your new email for Convo";
+
+  const html = layout({
+    title: subject,
+    preview: `Confirm this address to start signing in to Convo with it. The link expires in ${expiry}.`,
+    reason: reasonFor(newEmail, "it was entered as the new email of a Convo account"),
+    content: `
+      ${heading("Confirm your new email")}
+      ${paragraph(`Hi ${hi},`)}
+      ${paragraph(`Confirm that <strong style="color:${TEXT};">${escapeHtml(newEmail)}</strong> is your address and you'll sign in to Convo with it from now on.`, { margin: "0 0 28px" })}
+      ${button(link, "Confirm new email")}
+      ${paragraph(`The link expires in ${expiry} and works once. Until then, you keep signing in with your current email.`, { size: 14, color: MUTED, margin: "20px 0 0", align: "center" })}
+      ${paragraph("Didn't ask for this? You can safely ignore this email. Nothing changes without this link.", { size: 14, color: MUTED, margin: "20px 0 0" })}
+      ${linkFallback(link)}`,
+  });
+
+  const text = [
+    `Hi ${firstName(name)},`,
+    "",
+    `Confirm that ${newEmail} is your address and you'll sign in to Convo with it from now on:`,
+    "",
+    link,
+    "",
+    `The link expires in ${expiry} and works once. Until then, you keep signing in with your current email.`,
+    "",
+    "Didn't ask for this? You can safely ignore this email. Nothing changes without this link.",
+    "",
+    "— Convo",
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
+// To the current address: a change was asked for, while it can still be
+// stopped. Nothing to click, like the password notice.
+export function createEmailChangeRequestedEmail({ name, email, newEmail }) {
+  const hi = escapeHtml(firstName(name));
+  const subject = "A new email was requested for your Convo account";
+  const notYou =
+    "If you didn't do this, open Convo yourself, change your password and cancel the change under Settings, Account. Without the link sent to the new address, nothing changes.";
+
+  const html = layout({
+    title: subject,
+    preview: `Someone asked to change your Convo sign-in email to ${newEmail}.`,
+    reason: reasonFor(email, ACCOUNT_REASON),
+    content: `
+      ${heading("A new email was requested")}
+      ${paragraph(`Hi ${hi},`)}
+      ${paragraph(`Someone signed in to your Convo account asked to change its email from <strong style="color:${TEXT};">${escapeHtml(email)}</strong> to <strong style="color:${TEXT};">${escapeHtml(newEmail)}</strong>. If that was you, confirm it from the email we sent to the new address.`)}
+      ${paragraph(escapeHtml(notYou), { margin: "0" })}`,
+  });
+
+  const text = [
+    `Hi ${firstName(name)},`,
+    "",
+    `Someone signed in to your Convo account asked to change its email from ${email} to ${newEmail}. If that was you, confirm it from the email we sent to the new address.`,
+    "",
+    notYou,
+    "",
+    "— Convo",
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
+// To the old address, once the change is done.
+export function createEmailChangedEmail({ name, email, newEmail, changedAt }) {
+  const hi = escapeHtml(firstName(name));
+  const when = changeTime(changedAt);
+  const subject = "Your Convo email was changed";
+  const notYou =
+    "If you didn't do this, someone who knew your password made the change. We also wrote to this address when it was requested, so it could still be cancelled then.";
+
+  const html = layout({
+    title: subject,
+    preview: `Your Convo account now signs in with ${newEmail}.`,
+    reason: reasonFor(email, "it was the email of a Convo account"),
+    content: `
+      ${heading("Your email was changed")}
+      ${paragraph(`Hi ${hi},`)}
+      ${paragraph(`Your Convo account signs in with <strong style="color:${TEXT};">${escapeHtml(newEmail)}</strong> since ${escapeHtml(when)}. This address won't get emails from Convo anymore.`)}
+      ${paragraph(escapeHtml(notYou), { margin: "0" })}`,
+  });
+
+  const text = [
+    `Hi ${firstName(name)},`,
+    "",
+    `Your Convo account signs in with ${newEmail} since ${when}. This address won't get emails from Convo anymore.`,
+    "",
+    notYou,
+    "",
+    "— Convo",
+  ].join("\n");
+
+  return { subject, html, text };
+}

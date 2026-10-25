@@ -11,7 +11,13 @@ import {
   validateFileUpload,
 } from "#src/middleware/upload.middleware.js";
 import { searchForUsers } from "#controllers/friend.controller.js";
-import { deleteMyAccount, exportMyData } from "#controllers/account.controller.js";
+import {
+  cancelPendingEmailChange,
+  changeEmail,
+  deleteMyAccount,
+  exportMyData,
+  getEmail,
+} from "#controllers/account.controller.js";
 import {
   block,
   getBlocked,
@@ -34,6 +40,10 @@ router.get("/profile", getProfile);
 router.get("/me/export", rateLimitPerUser({ windowMs: 60 * 60 * 1000, max: 5 }), exportMyData);
 // Limits guessing the password from a signed-in session.
 router.delete("/me", rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 5 }), deleteMyAccount);
+router.get("/me/email", getEmail);
+// Checks the password and sends email, so it is limited like deleting.
+router.post("/me/email", rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 5 }), changeEmail);
+router.delete("/me/email/pending", cancelPendingEmailChange);
 
 // Name search reveals who has an account, so it is rate limited.
 router.get("/search", rateLimitPerUser({ windowMs: 60 * 1000, max: 30 }), searchForUsers);

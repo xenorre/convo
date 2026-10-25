@@ -3,6 +3,7 @@ import Block from "#models/block.model.js";
 import ChatDeletion from "#models/chatDeletion.model.js";
 import ChatHide from "#models/chatHide.model.js";
 import ChatMute from "#models/chatMute.model.js";
+import EmailChange from "#models/emailChange.model.js";
 import EmailVerification from "#models/emailVerification.model.js";
 import Friendship from "#models/friendship.model.js";
 import Message from "#models/message.model.js";
@@ -95,6 +96,7 @@ export const deleteAccount = async (userId, password, now = new Date()) => {
     ChatDeletion.deleteMany({ userId }),
     EmailVerification.deleteOne({ userId }),
     PasswordReset.deleteOne({ userId }),
+    EmailChange.deleteOne({ userId }),
   ]);
 
   // Storage last: a failure there leaves an orphaned file at worst.

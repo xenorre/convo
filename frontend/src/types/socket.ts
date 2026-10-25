@@ -23,6 +23,7 @@ export interface ServerToClientEvents {
   typing: (data: { userId: string; isTyping: boolean }) => void;
   'messages:read': (data: { readerId: string; readAt: string }) => void;
   'account:deleted': (data: { userId: string }) => void;
+  'account:email-changed': (data: { email: string }) => void;
 }
 
 export interface ClientToServerEvents {

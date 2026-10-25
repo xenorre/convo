@@ -1,5 +1,6 @@
 import {
   changePasswordSchema,
+  confirmEmailChangeSchema,
   forgotPasswordSchema,
   resendVerificationSchema,
   resetPasswordSchema,
@@ -20,6 +21,11 @@ import {
   requestPasswordReset,
   sendPasswordChangedEmail,
 } from "#services/passwordReset.service.js";
+import {
+  confirmEmailChange,
+  EMAIL_CHANGE_ERRORS,
+  sendEmailChangedEmail,
+} from "#services/emailChange.service.js";
 import { formatValidationError } from "#utils/format.js";
 import { PASSWORD_POLICY_MESSAGES, passwordPolicyError } from "#services/password.service.js";
 import {
@@ -42,6 +48,7 @@ import {
 import {
   closeSessionSockets,
   revokeSessionSockets,
+  userRoom,
 } from "#services/socket-session.service.js";
 import { io } from "#config/socket.js";
 
@@ -386,6 +393,42 @@ export const resetPassword = async (req, res) => {
     afterPasswordChange(req, user, { cancelReset: false });
   } catch (e) {
     logger.error("Error resetting password", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+// The link sent to a new email address. It works without being signed in
+// (it is often opened on another device); open tabs of the account learn the
+// new address over the socket, and the old address is told.
+export const confirmEmailChangeLink = async (req, res) => {
+  const invalid = () =>
+    res.status(400).json({
+      error: "This link is invalid or has expired",
+      code: "EMAIL_CHANGE_INVALID",
+      requestId: req.requestId,
+    });
+  const parsed = confirmEmailChangeSchema.safeParse(req.body);
+  if (!parsed.success) return invalid();
+
+  try {
+    const changed = await confirmEmailChange(parsed.data.token);
+    if (!changed) return invalid();
+
+    io.to(userRoom(changed.userId)).emit("account:email-changed", { email: changed.email });
+    res.status(200).json({ email: changed.email, userId: changed.userId, requestId: req.requestId });
+
+    sendEmailChangedEmail(changed).catch((error) =>
+      logger.error("Error sending email changed notice", { requestId: req.requestId, error: error.message })
+    );
+  } catch (e) {
+    if (e.message === EMAIL_CHANGE_ERRORS.EMAIL_TAKEN) {
+      return res.status(409).json({
+        error: "Another account started using this email in the meantime",
+        code: EMAIL_CHANGE_ERRORS.EMAIL_TAKEN,
+        requestId: req.requestId,
+      });
+    }
+    logger.error("Error confirming email change", { requestId: req.requestId, error: e.message });
     res.status(500).json({ error: "Internal server error", requestId: req.requestId });
   }
 };
