@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useRelationship } from "@/hooks/useRelationship";
 import { useFriendsStore } from "@/store/useFriendsStore";
 import type { Contact } from "@/types/auth";
+import type { MessagingRefusal } from "@/types/friends";
 import { rowPrimaryButton } from "./styles";
 
 interface MessagingUnavailableNoticeProps {
   user: Contact;
-  reason: "FRIENDS_ONLY" | "UNAVAILABLE";
+  reason: MessagingRefusal;
 }
 
 // Takes the message box's place when this person can't be written to.
@@ -27,7 +28,9 @@ function MessagingUnavailableNotice({ user, reason }: MessagingUnavailableNotice
   const text =
     reason === "FRIENDS_ONLY"
       ? `Only ${user.fullName}'s friends can message them.`
-      : `You can't message ${user.fullName}.`;
+      : reason === "ACCOUNT_DELETED"
+        ? "This account was deleted, so you can't reply."
+        : `You can't message ${user.fullName}.`;
 
   return (
     <div className="shrink-0 border-t border-slate-700/50 bg-slate-900/60 p-3 sm:p-4">

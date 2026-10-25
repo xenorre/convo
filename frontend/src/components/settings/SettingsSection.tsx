@@ -9,6 +9,9 @@ export const primaryButtonClass =
 export const secondaryButtonClass =
   "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-700/60 bg-slate-800/40 px-5 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700/50 hover:text-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 disabled:cursor-not-allowed disabled:opacity-50";
 
+export const dangerButtonClass =
+  "inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-2 text-sm font-medium text-red-300 transition-colors hover:bg-red-500/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 disabled:cursor-not-allowed disabled:opacity-50";
+
 interface SettingsSectionProps {
   title: string;
   description: string;

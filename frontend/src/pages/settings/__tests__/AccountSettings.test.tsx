@@ -1,7 +1,7 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import toast from 'react-hot-toast';
 import { apiService } from '@/services/apiService';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -9,7 +9,7 @@ import type { AppSocket } from '@/types/socket';
 import AccountSettings from '../AccountSettings';
 import { loadStrengthChecker } from '@/utils/passwordPolicy';
 
-vi.mock('@/services/apiService', () => ({ apiService: { put: vi.fn(), post: vi.fn() } }));
+vi.mock('@/services/apiService', () => ({ apiService: { put: vi.fn(), post: vi.fn(), get: vi.fn() } }));
 vi.mock('react-hot-toast', () => ({
   default: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }),
 }));
@@ -177,6 +177,107 @@ describe('Account settings', () => {
     const { container } = renderAccount();
 
     expect(container.querySelector('input[autocomplete="username"]')).toHaveValue(account.email);
+  });
+});
+
+describe('your data and deleting the account', () => {
+  const deleteAccount = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAuthStore.setState({ authUser: account, deleteAccount });
+  });
+
+  const renderWithLogin = () =>
+    render(
+      <MemoryRouter initialEntries={['/settings/account']}>
+        <Routes>
+          <Route path="/settings/account" element={<AccountSettings />} />
+          <Route path="/login" element={<p>Login page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+  const askToDelete = async (user: ReturnType<typeof userEvent.setup>, password: string) => {
+    if (password) await user.type(screen.getByLabelText('Your password'), password);
+    await user.click(screen.getByRole('button', { name: 'Delete account' }));
+  };
+
+  it('downloads a copy of the account as a JSON file', async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiService.get).mockResolvedValue({ format: 'convo-account-export' });
+    const fileParts: BlobPart[] = [];
+    vi.stubGlobal('Blob', class {
+      constructor(parts: BlobPart[]) {
+        fileParts.push(...parts);
+      }
+    });
+    const createObjectURL = vi.fn(() => 'blob:export');
+    // jsdom has no object URLs; these stand in for this test only.
+    const { createObjectURL: realCreate, revokeObjectURL: realRevoke } = URL;
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    onTestFinished(() => {
+      URL.createObjectURL = realCreate;
+      URL.revokeObjectURL = realRevoke;
+    });
+    const saved: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push(this.download);
+    });
+    renderWithLogin();
+
+    await user.click(screen.getByRole('button', { name: 'Download my data' }));
+
+    await waitFor(() => expect(saved).toEqual([expect.stringMatching(/^convo-data-\d{4}-\d{2}-\d{2}\.json$/)]));
+    expect(apiService.get).toHaveBeenCalledWith('/users/me/export');
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(fileParts[0]))).toEqual({ format: 'convo-account-export' });
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('asks for the password before anything else', async () => {
+    const user = userEvent.setup();
+    renderWithLogin();
+
+    await askToDelete(user, '');
+
+    expect(screen.getByLabelText('Your password')).toHaveAccessibleDescription('Enter your password to continue.');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it('says what goes, then deletes and opens the login page', async () => {
+    const user = userEvent.setup();
+    deleteAccount.mockResolvedValue({ kind: 'deleted' });
+    renderWithLogin();
+
+    await askToDelete(user, 'my-password');
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete your account?' });
+    expect(dialog).toHaveTextContent('Deleted account');
+    // Armed after a moment, so a double click can't answer it.
+    const confirm = screen.getByRole('button', { name: 'Delete forever' });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+
+    expect(await screen.findByText('Login page')).toBeInTheDocument();
+    expect(deleteAccount).toHaveBeenCalledExactlyOnceWith('my-password');
+  });
+
+  it('a wrong password closes the dialog and is shown on the field', async () => {
+    const user = userEvent.setup();
+    deleteAccount.mockResolvedValue({ kind: 'wrong-password' });
+    renderWithLogin();
+
+    await askToDelete(user, 'guess');
+    const confirm = screen.getByRole('button', { name: 'Delete forever' });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(screen.getByLabelText('Your password')).toHaveAccessibleDescription('Password is incorrect.');
+    expect(screen.queryByText('Login page')).toBeNull();
   });
 });
 

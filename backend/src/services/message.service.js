@@ -46,7 +46,7 @@ const findVisibleMessage = async (userId, messageId) => {
 
 // Files go after the documents, so a storage failure leaves an orphaned
 // file at worst, never a message pointing at a missing one.
-const removeFile = async (fileUrl) => {
+export const removeFile = async (fileUrl) => {
   if (!fileUrl) return;
   try {
     await deleteFile(fileUrl);
@@ -64,7 +64,7 @@ export const editMessage = async (userId, messageId, text, now = new Date()) => 
   if (text === (message.text ?? "")) return message;
 
   // Editing is writing to them, so it follows the same rules as sending.
-  const receiver = await User.findById(message.receiverId).select("privacy").lean();
+  const receiver = await User.findById(message.receiverId).select("privacy deletedAt").lean();
   if (!receiver) throw new Error(MESSAGE_ERRORS.NOT_FOUND);
   const permission = await messagePermission(userId, receiver);
   if (!permission.allowed) {

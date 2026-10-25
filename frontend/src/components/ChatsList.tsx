@@ -73,7 +73,9 @@ const ChatItem = memo(
   }) => {
     const handleClick = useCallback(() => onSelect(chat), [chat, onSelect]);
     const { lastMessage } = chat;
-    const status = isOnline ? "Online" : "Offline";
+    // A deleted account has no presence to show.
+    const status = chat.deleted ? "Account deleted" : isOnline ? "Online" : "Offline";
+    const presence = chat.deleted ? "" : isOnline ? "avatar-online" : "avatar-offline";
 
     return (
       <button
@@ -85,7 +87,7 @@ const ChatItem = memo(
         <div className="flex items-center gap-3 justify-between">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div
-              className={`avatar shrink-0 ${isOnline ? "avatar-online" : "avatar-offline"}`}
+              className={`avatar shrink-0 ${presence}`}
             >
               <div className="flex! size-11 items-center justify-center rounded-full bg-slate-700/70 ring-1 ring-slate-600/40">
                 {chat.profilePic ? (

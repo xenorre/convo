@@ -13,6 +13,10 @@ export const updateProfileSchema = z
   .strict();
 
 // File validation constants
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Enter your password").max(1024),
+}).strict();
+
 export const FILE_VALIDATION = {
   MAX_SIZE: 5 * 1024 * 1024, // 5MB
   ALLOWED_TYPES: ["image/jpeg", "image/jpg", "image/png", "image/webp"],

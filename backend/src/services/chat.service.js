@@ -98,7 +98,7 @@ export const buildChatSummariesPipeline = (userId, deletions = []) => {
         localField: "_id",
         foreignField: "_id",
         as: "partner",
-        pipeline: [{ $project: { fullName: 1, profilePic: 1 } }],
+        pipeline: [{ $project: { fullName: 1, profilePic: 1, deletedAt: 1 } }],
       },
     },
     // Partners whose account no longer exists are dropped, as before.
@@ -108,6 +108,8 @@ export const buildChatSummariesPipeline = (userId, deletions = []) => {
         _id: "$partner._id",
         fullName: "$partner.fullName",
         profilePic: "$partner.profilePic",
+        // Their messages stay, shown as from "Deleted account".
+        deleted: { $ne: [{ $ifNull: ["$partner.deletedAt", null] }, null] },
         unreadCount: 1,
         lastMessage: {
           _id: "$lastMessage._id",

@@ -677,6 +677,24 @@ describe('hidden and minimized chats', () => {
     expect(useChatStore.getState().chats[0].hidden).toBeUndefined();
   });
 
+  it('shows someone who deleted their account as "Deleted account" and reloads what was shown', () => {
+    vi.mocked(apiService.get).mockResolvedValue({ chats: [], unreadCounts: {}, messages: [] });
+    useChatStore.setState({ chats: [{ ...sender }], selectedUser: sender, minimizedChats: [other, sender] });
+    useChatStore.getState().bindSocketOnce();
+    const on = (event: string) => socketOn.mock.calls.filter(([name]) => name === event).at(-1)![1];
+    const revision = useChatStore.getState().messagingRevision;
+
+    on('account:deleted')({ userId: sender._id });
+
+    const deleted = { _id: sender._id, fullName: 'Deleted account', profilePic: '', deleted: true };
+    expect(useChatStore.getState().selectedUser).toEqual(deleted);
+    expect(useChatStore.getState().minimizedChats).toEqual([other, deleted]);
+    // The message box asks again whether it may be used.
+    expect(useChatStore.getState().messagingRevision).toBe(revision + 1);
+    expect(apiService.get).toHaveBeenCalledWith('/messages/chats');
+    expect(vi.mocked(apiService.get).mock.calls.some(([url]) => String(url).includes(sender._id))).toBe(true);
+  });
+
   it('keeps at most five minimized chats, newest last, without duplicates', () => {
     const minimize = (contact: Contact) => {
       useChatStore.getState().setSelectedUser(contact);

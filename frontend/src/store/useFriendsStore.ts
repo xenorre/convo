@@ -225,6 +225,16 @@ export const useFriendsStore = create<FriendsState>((set, get) => {
           if (!isActive()) return;
           set((state) => ({ friends: state.friends.filter(({ _id }) => _id !== userId) }));
         },
+        // Their friendships, requests and blocks were deleted with the account.
+        "account:deleted": ({ userId }: { userId: string }) => {
+          if (!isActive()) return;
+          set((state) => ({
+            friends: state.friends.filter(({ _id }) => _id !== userId),
+            incoming: state.incoming.filter((request) => request.user._id !== userId),
+            outgoing: state.outgoing.filter((request) => request.user._id !== userId),
+            blocked: state.blocked.filter(({ _id }) => _id !== userId),
+          }));
+        },
       } as const;
 
       // Events missed while disconnected are picked up by reloading.
@@ -239,6 +249,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => {
       socket.on("friend:accepted", handlers["friend:accepted"]);
       socket.on("friend:request:removed", handlers["friend:request:removed"]);
       socket.on("friend:removed", handlers["friend:removed"]);
+      socket.on("account:deleted", handlers["account:deleted"]);
       socket.on("connect", onConnect);
       set({
         boundSocket: socket,
@@ -247,6 +258,7 @@ export const useFriendsStore = create<FriendsState>((set, get) => {
           socket.off("friend:accepted", handlers["friend:accepted"]);
           socket.off("friend:request:removed", handlers["friend:request:removed"]);
           socket.off("friend:removed", handlers["friend:removed"]);
+          socket.off("account:deleted", handlers["account:deleted"]);
           socket.off("connect", onConnect);
         },
       });

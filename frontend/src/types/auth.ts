@@ -12,6 +12,8 @@ export interface Contact {
   fullName: string;
   _id: string;
   profilePic: string;
+  // A deleted account: its old messages stay, shown as from "Deleted account".
+  deleted?: boolean;
 }
 
 export interface SignUpData {
@@ -35,6 +37,8 @@ export type ResetPasswordOutcome =
   | { kind: "refused"; message: string }
   | { kind: "invalid" }
   | null;
+
+export type DeleteAccountOutcome = { kind: "deleted" } | { kind: "wrong-password" } | null;
 
 export interface AuthState {
   authUser: AuthUser | null;
@@ -61,6 +65,9 @@ export interface AuthState {
   // null: something else failed, already reported as a toast.
   resetPassword: (token: string, password: string) => Promise<ResetPasswordOutcome>;
   logout: () => Promise<void>;
+  // Deletes the account after checking its password, and signs out here.
+  // null: something else failed, already reported as a toast.
+  deleteAccount: (password: string) => Promise<DeleteAccountOutcome>;
   // Applies a profile change returned by the server to the signed-in user.
   updateAuthUser: (user: AuthUser) => void;
   forceLogout: (message?: string, sessionVersion?: number) => void;

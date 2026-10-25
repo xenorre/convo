@@ -11,7 +11,7 @@ export const DEFAULT_PROFILE_PIC = User.schema.path("profilePic").defaultValue;
 export const isDefaultProfileImage = (url) =>
   !url || url.includes("wikimedia.org") || url.includes("placeholder");
 
-const deleteStoredProfileImage = async (userId, imageUrl) => {
+export const deleteStoredProfileImage = async (userId, imageUrl) => {
   if (isDefaultProfileImage(imageUrl)) return;
   try {
     await deleteFile(imageUrl);

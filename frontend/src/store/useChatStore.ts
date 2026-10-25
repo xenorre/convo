@@ -66,7 +66,20 @@ const normalizeMessage = (msg: RawMessage): Message => ({
 const LAST_MESSAGE_PREVIEW_LENGTH = 120;
 
 // selectedUser stays a plain contact even when it is picked from the chat list.
-const toContact = ({ _id, fullName, profilePic }: Contact): Contact => ({ _id, fullName, profilePic });
+const toContact = ({ _id, fullName, profilePic, deleted }: Contact): Contact => ({
+  _id,
+  fullName,
+  profilePic,
+  ...(deleted && { deleted }),
+});
+
+// How someone appears once they deleted their account (as the server says).
+const asDeletedAccount = (contact: Contact): Contact => ({
+  _id: contact._id,
+  fullName: "Deleted account",
+  profilePic: "",
+  deleted: true,
+});
 
 const toLastMessage = (message: Message): ChatLastMessage => ({
   _id: message._id,
@@ -668,6 +681,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((state) => withHiddenChat(state, String(userId), false));
     };
 
+    // Someone this user talked to deleted their account. Their messages stay
+    // but their files are gone, so what is shown is loaded again.
+    const onAccountDeleted = ({ userId }: { userId: string }) => {
+      if (!isActiveSocket()) return;
+      const id = String(userId);
+      const isThem = (contact: Contact) => String(contact._id) === id;
+      set((state) => ({
+        selectedUser: state.selectedUser && isThem(state.selectedUser) ? asDeletedAccount(state.selectedUser) : state.selectedUser,
+        minimizedChats: state.minimizedChats.map((chat) => (isThem(chat) ? asDeletedAccount(chat) : chat)),
+        messagingRevision: state.messagingRevision + 1,
+      }));
+      setTyping(id, false);
+      void get().getMyChatPartners();
+      if (get().selectedUser && isThem(get().selectedUser!)) void get().getMessagesByUserId(id);
+    };
+
     // Deleted for this user in another tab.
     const onMessageHidden = ({ messageId, peerId }: { messageId: string; peerId: string }) => {
       if (!isActiveSocket()) return;
@@ -688,6 +717,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     socket.on("typing", onTyping);
     socket.on("messages:read", onMessagesRead);
     socket.on("chat:unhidden", onChatUnhidden);
+    socket.on("account:deleted", onAccountDeleted);
     set({
       socketBound: true,
       boundSocket: socket,
@@ -704,6 +734,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         socket.off("typing", onTyping);
         socket.off("messages:read", onMessagesRead);
         socket.off("chat:unhidden", onChatUnhidden);
+        socket.off("account:deleted", onAccountDeleted);
       },
     });
   },

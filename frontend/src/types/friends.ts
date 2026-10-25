@@ -35,9 +35,10 @@ export interface BlockResponse {
 
 // Whether a conversation can be written in. A block on their side reads as
 // "UNAVAILABLE", just like other reasons the server does not explain.
+export type MessagingRefusal = "FRIENDS_ONLY" | "ACCOUNT_DELETED" | "UNAVAILABLE";
 export type MessagingResponse =
   | { canMessage: true }
-  | { canMessage: false; reason: "FRIENDS_ONLY" | "UNAVAILABLE" };
+  | { canMessage: false; reason: MessagingRefusal };
 
 export interface PrivacySettings {
   allowMessagesFrom: "everyone" | "friends";

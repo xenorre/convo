@@ -3,6 +3,7 @@ import { cookies } from "#src/utils/cookies.js";
 import { jwttoken } from "#src/utils/jwt.js";
 import logger from "#config/logger.js";
 import {
+  ACCOUNT_DELETED,
   hasActiveSession,
   publicSessionUser,
   SESSION_REVOKED,
@@ -34,7 +35,10 @@ export const protectRoute = async (req, res, next) => {
     }
 
     const user = await User.findById(decoded.id).select("-password +activeSessionId");
-    if (!user) return res.status(404).json({ error: "User not found" });
+    // 401, not 404: the browser is simply signed out, like any ended session.
+    if (!user || user.deletedAt) {
+      return res.status(401).json({ error: ACCOUNT_DELETED.message, code: ACCOUNT_DELETED.code });
+    }
 
     if (!hasActiveSession(user, decoded.sid)) {
       return res.status(401).json({

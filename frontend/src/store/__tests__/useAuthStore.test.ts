@@ -12,7 +12,7 @@ import {
 } from '@/services/authSession';
 
 vi.mock('@/services/apiService', () => ({
-  apiService: { get: vi.fn(), post: vi.fn() },
+  apiService: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
 }));
 
 const user: AuthUser = {
@@ -444,5 +444,46 @@ describe('password reset', () => {
     expect(await useAuthStore.getState().resetPassword('token', 'copper-lantern-meadow-58')).toBeNull();
     expect(useAuthStore.getState().authUser).toBeNull();
     expect(toast.error).toHaveBeenCalled();
+  });
+});
+
+describe('account deletion', () => {
+  it('signs out here once the account is deleted, with one clear message', async () => {
+    useAuthStore.setState({ authUser: user, isCheckingAuth: false });
+    vi.mocked(apiService.delete).mockResolvedValueOnce({});
+
+    expect(await useAuthStore.getState().deleteAccount('secret')).toEqual({ kind: 'deleted' });
+
+    expect(apiService.delete).toHaveBeenCalledWith('/users/me', { data: { password: 'secret' } });
+    expect(useAuthStore.getState().authUser).toBeNull();
+    expect(toast.success).toHaveBeenCalledWith('Your account was deleted.', expect.anything());
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("its own deletion notice from the server doesn't show as an outside sign-out", async () => {
+    const socket = createSocket();
+    vi.mocked(io).mockReturnValueOnce(socket as unknown as ReturnType<typeof io>);
+    useAuthStore.setState({ authUser: user, isCheckingAuth: false });
+    await useAuthStore.getState().connectSocket();
+    // The server tells the socket before the response arrives.
+    vi.mocked(apiService.delete).mockImplementationOnce(async () => {
+      socket.listeners.get('session:revoked')!({ code: 'ACCOUNT_DELETED', message: 'This account was deleted.' });
+      return {};
+    });
+
+    await useAuthStore.getState().deleteAccount('secret');
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith('Your account was deleted.', expect.anything());
+    expect(useAuthStore.getState().authUser).toBeNull();
+  });
+
+  it('a wrong password keeps the account and the session', async () => {
+    useAuthStore.setState({ authUser: user, isCheckingAuth: false });
+    vi.mocked(apiService.delete).mockRejectedValueOnce({ status: 400, code: 'ACCOUNT_INVALID_PASSWORD', message: 'x' });
+
+    expect(await useAuthStore.getState().deleteAccount('guess')).toEqual({ kind: 'wrong-password' });
+    expect(useAuthStore.getState().authUser).toEqual(user);
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

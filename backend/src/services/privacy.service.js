@@ -84,7 +84,7 @@ export const listBlocked = async (userId) => {
 // gone, which looks the same as an unfriend and does not reveal the block.
 export const blockUser = async (userId, targetId) => {
   if (String(userId) === String(targetId)) throw new Error(PRIVACY_ERRORS.SELF);
-  if (!(await User.exists({ _id: targetId }))) throw new Error(PRIVACY_ERRORS.USER_NOT_FOUND);
+  if (!(await User.exists({ _id: targetId, deletedAt: null }))) throw new Error(PRIVACY_ERRORS.USER_NOT_FOUND);
 
   await Block.updateOne(
     { blocker: userId, blocked: targetId },
@@ -103,9 +103,10 @@ const areFriends = async (a, b) =>
   Boolean(await Friendship.exists({ pairKey: friendPairKey(a, b), status: "accepted" }));
 
 // Whether `senderId` may send a message to `receiver` (a user document with
-// its privacy settings). "Friends only" means current friends: a shared
+// its privacy settings and deletedAt). "Friends only" means current friends: a shared
 // history does not count, so removing someone from friends stops new messages.
 export const messagePermission = async (senderId, receiver) => {
+  if (receiver.deletedAt) return { allowed: false, reason: "ACCOUNT_DELETED" };
   if (await isBlockedBetween(senderId, receiver._id)) return { allowed: false, reason: "BLOCKED" };
   if (privacyOf(receiver).allowMessagesFrom === "everyone") return { allowed: true };
   if (await areFriends(senderId, receiver._id)) return { allowed: true };

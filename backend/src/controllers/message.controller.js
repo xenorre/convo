@@ -88,7 +88,7 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user._id;
 
     // Checked before any upload, so a refused message leaves no stored file.
-    const receiver = await User.findById(receiverId).select("privacy").lean();
+    const receiver = await User.findById(receiverId).select("privacy deletedAt").lean();
     if (!receiver) {
       return res.status(404).json({ error: "User not found", requestId: req.requestId });
     }

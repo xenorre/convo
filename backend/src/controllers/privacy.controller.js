@@ -63,9 +63,10 @@ export const updateSettings = handle(async (req, res) => {
 });
 
 // Lets a conversation show why it can't be written in. A block on their
-// side reads as "UNAVAILABLE" so it cannot be told apart from other reasons.
+// side reads as "UNAVAILABLE" so it cannot be told apart from other reasons;
+// a deleted account is said plainly, since everyone sees it as deleted.
 export const getMessaging = handle(async (req, res) => {
-  const receiver = await User.findById(req.params.id).select("privacy").lean();
+  const receiver = await User.findById(req.params.id).select("privacy deletedAt").lean();
   if (!receiver) throw new Error(PRIVACY_ERRORS.USER_NOT_FOUND);
 
   const permission = await messagePermission(req.user._id, receiver);
@@ -74,7 +75,7 @@ export const getMessaging = handle(async (req, res) => {
       ? { canMessage: true, requestId: req.requestId }
       : {
           canMessage: false,
-          reason: permission.reason === "FRIENDS_ONLY" ? "FRIENDS_ONLY" : "UNAVAILABLE",
+          reason: ["FRIENDS_ONLY", "ACCOUNT_DELETED"].includes(permission.reason) ? permission.reason : "UNAVAILABLE",
           requestId: req.requestId,
         }
   );

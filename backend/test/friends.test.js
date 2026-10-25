@@ -68,7 +68,7 @@ const call = async (handler, { body = {}, params = {}, query: q = {}, user = ada
 
 test("sending a request stores it and tells the recipient who asked", async () => {
   noBlocksOrHistory();
-  mock.method(User, "findById", () => query(bob));
+  mock.method(User, "findOne", () => query(bob));
   mock.method(Friendship, "findOne", () => query(null));
   const create = mock.method(Friendship, "create", async (doc) => ({ _id: requestDocId, createdAt: "now", ...doc }));
   const events = captureSocket();
@@ -89,7 +89,7 @@ test("sending a request stores it and tells the recipient who asked", async () =
 });
 
 test("inviting someone who already invited you makes you friends", async () => {
-  mock.method(User, "findById", () => query(bob));
+  mock.method(User, "findOne", () => query(bob));
   mock.method(Friendship, "findOne", () => query({ _id: requestDocId, requester: bob._id, recipient: ada._id, status: "pending" }));
   const update = mock.method(Friendship, "findOneAndUpdate", () => query({ _id: requestDocId, status: "accepted" }));
   const events = captureSocket();
@@ -107,18 +107,18 @@ test("request errors map to clear status codes", async () => {
   const cases = [
     [{ userId: ada._id }, () => {}, 400, "FRIEND_SELF"],
     [{ userId: bob._id }, () => {
-      mock.method(User, "findById", () => query(null));
+      mock.method(User, "findOne", () => query(null));
     }, 404, "FRIEND_USER_NOT_FOUND"],
     [{ userId: bob._id }, () => {
-      mock.method(User, "findById", () => query(bob));
+      mock.method(User, "findOne", () => query(bob));
       mock.method(Friendship, "findOne", () => query({ status: "accepted", requester: bob._id }));
     }, 409, "FRIEND_ALREADY_FRIENDS"],
     [{ userId: bob._id }, () => {
-      mock.method(User, "findById", () => query(bob));
+      mock.method(User, "findOne", () => query(bob));
       mock.method(Friendship, "findOne", () => query({ status: "pending", requester: ada._id }));
     }, 409, "FRIEND_ALREADY_REQUESTED"],
     [{ userId: bob._id }, () => {
-      mock.method(User, "findById", () => query(bob));
+      mock.method(User, "findOne", () => query(bob));
       mock.method(Friendship, "findOne", () => query(null));
       mock.method(Friendship, "create", async () => { throw Object.assign(new Error("dup"), { code: 11000 }); });
     }, 409, "FRIEND_ALREADY_REQUESTED"],
@@ -136,13 +136,13 @@ test("request errors map to clear status codes", async () => {
 });
 
 test("malformed requests are rejected before any lookup", async () => {
-  const findById = mock.method(User, "findById", () => assert.fail("must not query"));
+  const findOne = mock.method(User, "findOne", () => assert.fail("must not query"));
 
   for (const body of [{}, { userId: "nope" }, { userId: bob._id, extra: 1 }]) {
     const res = await call(friends.createFriendRequest, { body });
     assert.equal(res.statusCode, 400, JSON.stringify(body));
   }
-  assert.equal(findById.mock.callCount(), 0);
+  assert.equal(findOne.mock.callCount(), 0);
 });
 
 test("only the recipient can accept, and the requester hears about it", async () => {
@@ -224,6 +224,7 @@ test("user search escapes the query and reports each relationship", async () => 
   assert.equal(res.statusCode, 200);
   assert.deepEqual(find.mock.calls[0].arguments[0], {
     _id: { $nin: [ada._id] },
+    deletedAt: null,
     fullName: { $regex: "b\\(o\\)b", $options: "i" },
   });
   assert.deepEqual(res.body.users, [{
@@ -263,10 +264,10 @@ test("the per-user rate limit blocks a burst and resets after the window", async
 
 test("people who blocked or were blocked, or accept no requests, cannot be invited", async () => {
   for (const [arrange, why] of [
-    [() => { noBlocksOrHistory({ blocked: true }); mock.method(User, "findById", () => query(bob)); }, "block"],
+    [() => { noBlocksOrHistory({ blocked: true }); mock.method(User, "findOne", () => query(bob)); }, "block"],
     [() => {
       noBlocksOrHistory();
-      mock.method(User, "findById", () => query({ ...bob, privacy: { allowFriendRequestsFrom: "nobody" } }));
+      mock.method(User, "findOne", () => query({ ...bob, privacy: { allowFriendRequestsFrom: "nobody" } }));
     }, "nobody"],
   ]) {
     mock.restoreAll();

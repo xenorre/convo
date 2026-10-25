@@ -38,7 +38,7 @@ function ChatHeader() {
       </button>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <div
-          className={`avatar shrink-0 ${isOnline ? "avatar-online" : "avatar-offline"}`}
+          className={`avatar shrink-0 ${selectedUser?.deleted ? "" : isOnline ? "avatar-online" : "avatar-offline"}`}
         >
           <div className="flex! size-11 items-center justify-center rounded-full bg-slate-700/70 ring-1 ring-white/10 sm:size-12">
             {selectedUser?.profilePic ? (
@@ -74,7 +74,7 @@ function ChatHeader() {
           <p
             className={`mt-0.5 text-xs ${isTyping || isOnline ? "text-cyan-400" : "text-slate-400"}`}
           >
-            {isTyping ? "typing…" : isOnline ? "Online" : "Offline"}
+            {selectedUser?.deleted ? "Account deleted" : isTyping ? "typing…" : isOnline ? "Online" : "Offline"}
           </p>
         </div>
       </div>

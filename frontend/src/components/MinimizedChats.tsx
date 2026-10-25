@@ -55,7 +55,7 @@ function MinimizedChats() {
                 title={chat.fullName}
                 aria-label={`Open chat with ${chat.fullName}${details ? ` (${details})` : ""}`}
                 onClick={() => setSelectedUser(chat)}
-                className={`avatar ${isOnline ? "avatar-online" : "avatar-offline"} relative cursor-pointer rounded-full shadow-lg shadow-slate-950/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400`}
+                className={`avatar ${chat.deleted ? "" : isOnline ? "avatar-online" : "avatar-offline"} relative cursor-pointer rounded-full shadow-lg shadow-slate-950/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400`}
               >
                 <span className="flex! size-12 items-center justify-center overflow-hidden rounded-full bg-slate-700 text-sm font-semibold text-slate-100 ring-2 ring-slate-900">
                   {!isDefaultAvatar(chat.profilePic) ? (

@@ -18,6 +18,9 @@ import {
 
 let latestAuthCheck = 0;
 let pendingLogout: Promise<void> | undefined;
+// While this tab deletes its own account, the server's "signed out" notices
+// (socket and 401s) are about that deletion; the response handles it.
+let isDeletingAccount = false;
 let latestSocketConnection = 0;
 let pendingSocketConnection: Promise<void> | undefined;
 let socketClientModule: Promise<typeof import('socket.io-client')> | undefined;
@@ -208,6 +211,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return logoutRequest;
   },
 
+  deleteAccount: async password => {
+    const sessionVersion = getAuthSessionVersion();
+    isDeletingAccount = true;
+    try {
+      await apiService.delete('/users/me', { data: { password } });
+    } catch (e: unknown) {
+      if (createApiError(e).code === 'ACCOUNT_INVALID_PASSWORD') return { kind: 'wrong-password' };
+      if (isCurrentAuthSession(sessionVersion)) handleStoreError(e, "Couldn't delete your account. Try again later.");
+      return null;
+    } finally {
+      isDeletingAccount = false;
+    }
+    if (isCurrentAuthSession(sessionVersion)) {
+      advanceAuthSession();
+      get().disconnectSocket();
+      set({ authUser: null, isCheckingAuth: false, isLoggingIn: false, isSigningUp: false });
+    }
+    toast.dismiss();
+    toast.success('Your account was deleted.', { duration: 7000 });
+    return { kind: 'deleted' };
+  },
+
   updateAuthUser: user => {
     const current = get().authUser;
     if (!current || current._id !== user._id) return;
@@ -269,7 +294,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (isCurrentSocket()) set({ onlineUsers: userIds });
       });
       socket.on('session:revoked', data => {
-        if (isCurrentSocket()) get().forceLogout(data.message || SESSION_REVOKED_MESSAGE, sessionVersion);
+        if (isCurrentSocket() && !isDeletingAccount) {
+          get().forceLogout(data.message || SESSION_REVOKED_MESSAGE, sessionVersion);
+        }
       });
       socket.on('connect_error', error => {
         if (!isCurrentSocket()) return;
@@ -313,6 +340,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 }));
 
 registerAuthenticationFailureHandler(({ version, code, message }) => {
+  if (isDeletingAccount) return;
   // An anonymous initial /auth/check should open login without a notification.
   if (useAuthStore.getState().authUser || code === 'SESSION_REVOKED') {
     useAuthStore.getState().forceLogout(message, version);

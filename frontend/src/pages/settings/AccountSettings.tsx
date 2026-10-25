@@ -1,5 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router";
 import toast from "react-hot-toast";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { apiService } from "@/services/apiService";
 import { useAuthStore } from "@/store/useAuthStore";
 import type { ChangePasswordRequest } from "@/types/api";
@@ -14,6 +16,7 @@ import {
   type PasswordAccount,
 } from "@/utils/passwordPolicy";
 import {
+  dangerButtonClass,
   primaryButtonClass,
   secondaryButtonClass,
   SettingsCard,
@@ -188,11 +191,129 @@ function PasswordCard() {
   );
 }
 
+// A copy of everything stored about the account, saved as a JSON file.
+function DataExportCard() {
+  const [isExporting, setIsExporting] = useState(false);
+
+  const download = async () => {
+    setIsExporting(true);
+    try {
+      const data = await apiService.get<unknown>("/users/me/export");
+      const file = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `convo-data-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      // Some browsers start the download only after the click returns.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (e) {
+      handleStoreError(e, "Couldn't prepare your data. Try again later.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  return (
+    <SettingsCard
+      title="Your data"
+      description="Download a copy of your profile, friends, settings and every message as a JSON file. Photos and files are included as links."
+    >
+      <button type="button" className={secondaryButtonClass} disabled={isExporting} onClick={() => void download()}>
+        {isExporting ? "Preparing…" : "Download my data"}
+      </button>
+    </SettingsCard>
+  );
+}
+
+// The password first, then a dialog that says exactly what goes.
+function DeleteAccountCard() {
+  const email = useAuthStore((state) => state.authUser?.email ?? "");
+  const deleteAccount = useAuthStore((state) => state.deleteAccount);
+  const navigate = useNavigate();
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string>();
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const passwordInput = useRef<HTMLInputElement>(null);
+
+  const ask = (event: FormEvent) => {
+    event.preventDefault();
+    if (!password) {
+      setError("Enter your password to continue.");
+      passwordInput.current?.focus();
+      return;
+    }
+    setIsConfirming(true);
+  };
+
+  const confirm = async () => {
+    setIsDeleting(true);
+    const outcome = await deleteAccount(password);
+    if (outcome?.kind === "deleted") {
+      navigate("/login", { replace: true });
+      return;
+    }
+    setIsDeleting(false);
+    setIsConfirming(false);
+    if (outcome?.kind === "wrong-password") {
+      setError("Password is incorrect.");
+      passwordInput.current?.focus();
+    }
+  };
+
+  return (
+    <SettingsCard
+      title="Delete account"
+      description="Deletes your account right away. This can't be undone, so download your data first if you want to keep it."
+    >
+      <form onSubmit={ask} noValidate className="space-y-4">
+        <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
+        <PasswordField
+          id="settings-delete-password"
+          label="Your password"
+          value={password}
+          error={error}
+          autoComplete="current-password"
+          inputRef={passwordInput}
+          onChange={(value) => {
+            setPassword(value);
+            if (error) setError(undefined);
+          }}
+        />
+        <button type="submit" className={dangerButtonClass}>
+          Delete account
+        </button>
+      </form>
+      {isConfirming && (
+        <ConfirmDialog
+          title="Delete your account?"
+          // Opens where "Delete account" was; a double click must not answer it.
+          confirmDelayMs={600}
+          actions={[{ label: isDeleting ? "Deleting…" : "Delete forever", onSelect: () => void confirm() }]}
+          isBusy={isDeleting}
+          onCancel={() => setIsConfirming(false)}
+        >
+          <p>This can't be undone. Right away:</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>your profile, photo, friends and settings are deleted,</li>
+            <li>files and photos you sent are deleted,</li>
+            <li>you're signed out on every device.</li>
+          </ul>
+          <p>Messages you sent stay in other people's chats, shown as from "Deleted account".</p>
+        </ConfirmDialog>
+      )}
+    </SettingsCard>
+  );
+}
+
 function AccountSettings() {
   const logout = useAuthStore((state) => state.logout);
 
   return (
-    <SettingsSection title="Account" description="Password and sign-in">
+    <SettingsSection title="Account" description="Password, sign-in and your data">
       <PasswordCard />
       <SettingsCard
         title="Session"
@@ -202,6 +323,8 @@ function AccountSettings() {
           Log out
         </button>
       </SettingsCard>
+      <DataExportCard />
+      <DeleteAccountCard />
     </SettingsSection>
   );
 }

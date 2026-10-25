@@ -80,7 +80,7 @@ test("aggregation matches on ObjectIds, since aggregate() does not cast strings"
   assert.equal(String(sent.senderId), myId);
 });
 
-test("pipeline sorts on the indexed keys and only exposes public partner fields", () => {
+test("pipeline sorts on the indexed keys and only exposes public partner fields and deletion", () => {
   const pipeline = buildChatSummariesPipeline(myId);
   const sort = pipeline.find((stage) => stage.$sort).$sort;
   const lookup = pipeline.find((stage) => stage.$lookup).$lookup;
@@ -91,7 +91,7 @@ test("pipeline sorts on the indexed keys and only exposes public partner fields"
     { senderId: 1, createdAt: -1, _id: -1 },
     { receiverId: 1, createdAt: -1, _id: -1 },
   ]);
-  assert.deepEqual(lookup.pipeline, [{ $project: { fullName: 1, profilePic: 1 } }]);
+  assert.deepEqual(lookup.pipeline, [{ $project: { fullName: 1, profilePic: 1, deletedAt: 1 } }]);
   assert.equal(LAST_MESSAGE_PREVIEW_LENGTH, 120);
 });
 

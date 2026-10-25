@@ -11,6 +11,7 @@ import {
   validateFileUpload,
 } from "#src/middleware/upload.middleware.js";
 import { searchForUsers } from "#controllers/friend.controller.js";
+import { deleteMyAccount, exportMyData } from "#controllers/account.controller.js";
 import {
   block,
   getBlocked,
@@ -28,6 +29,11 @@ const router = express.Router();
 router.use(protectRoute);
 
 router.get("/profile", getProfile);
+
+// The export reads every message of the account, so it is kept rare.
+router.get("/me/export", rateLimitPerUser({ windowMs: 60 * 60 * 1000, max: 5 }), exportMyData);
+// Limits guessing the password from a signed-in session.
+router.delete("/me", rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 5 }), deleteMyAccount);
 
 // Name search reveals who has an account, so it is rate limited.
 router.get("/search", rateLimitPerUser({ windowMs: 60 * 1000, max: 30 }), searchForUsers);

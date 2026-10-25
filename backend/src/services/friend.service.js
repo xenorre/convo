@@ -31,8 +31,9 @@ const isSameUser = (a, b) => String(a?._id ?? a) === String(b?._id ?? b);
 const otherSide = (friendship, userId) =>
   isSameUser(friendship.requester, userId) ? friendship.recipient : friendship.requester;
 
+// A deleted account counts as missing: nobody can befriend it.
 const loadPublicUser = (userId) =>
-  User.findById(userId).select(`${PUBLIC_USER_FIELDS} privacy`).lean();
+  User.findOne({ _id: userId, deletedAt: null }).select(`${PUBLIC_USER_FIELDS} privacy`).lean();
 
 export const listFriends = async (userId) => {
   const friendships = await Friendship.find({
@@ -246,6 +247,8 @@ const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export const searchUsers = async (userId, query) => {
   const users = await User.find({
     _id: { $nin: [userId, ...(await blockedPeerIds(userId))] },
+    // null also matches accounts saved before deletedAt existed.
+    deletedAt: null,
     fullName: { $regex: escapeRegex(query), $options: "i" },
   })
     .select(`${PUBLIC_USER_FIELDS} privacy`)

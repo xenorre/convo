@@ -27,6 +27,13 @@ const users = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Set when the owner deleted the account. What's left is an empty shell
+    // (no name, email, photo, password or settings) that keeps their old
+    // messages readable for the people they wrote to, as "Deleted account".
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
     profilePic: {
       type: String,
       default:

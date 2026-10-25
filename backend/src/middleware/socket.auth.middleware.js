@@ -43,7 +43,7 @@ const socketAuthMiddleware = async (socket, next) => {
 
     const user = await User.findById(decoded.id).select("-password +activeSessionId");
 
-    if (!user) {
+    if (!user || user.deletedAt) {
       logger.error("Socket connection rejected: User not found");
       return next(unauthorizedError());
     }

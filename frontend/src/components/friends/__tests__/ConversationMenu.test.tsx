@@ -36,6 +36,24 @@ describe('Conversation menu and blocked conversations', () => {
     vi.unstubAllGlobals();
   });
 
+  it('a deleted account can only be hidden or deleted, and says why it cannot be answered', async () => {
+    const user = userEvent.setup();
+    const deleted = { _id: 'sam', fullName: 'Deleted account', profilePic: '', deleted: true };
+    useChatStore.setState({ selectedUser: deleted, chats: [{ ...deleted }] });
+    vi.mocked(apiService.get).mockImplementation(async (url) =>
+      url === '/users/sam/messaging' ? { canMessage: false, reason: 'ACCOUNT_DELETED' } : { messages: [] });
+    render(<ChatContainer />);
+
+    expect(await screen.findByText("This account was deleted, so you can't reply.")).toBeInTheDocument();
+    expect(screen.getByText('Account deleted')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'More actions for Deleted account' }));
+    const items = screen.getAllByRole('button').map((button) => button.textContent);
+    expect(items).toEqual(expect.arrayContaining(['Hide chat', 'Delete chat']));
+    expect(items).not.toEqual(expect.arrayContaining(['Add friend']));
+    expect(screen.queryByRole('button', { name: 'Block' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mute notifications' })).toBeNull();
+  });
+
   const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
     render(<ChatContainer />);
     await act(async () => {});

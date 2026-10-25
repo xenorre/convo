@@ -135,6 +135,15 @@ describe('friends store', () => {
     handler('friend:removed')({ userId: 'zoe' });
     expect(useFriendsStore.getState().friends.map((f) => f._id)).toEqual(['anna']);
 
+    useFriendsStore.setState({
+      incoming: [request('in-2', bob)],
+      outgoing: [request('out-2', anna)],
+      blocked: [{ ...bob, blockedAt: 'then' }],
+    });
+    handler('account:deleted')({ userId: 'anna' });
+    handler('account:deleted')({ userId: 'bob' });
+    expect(useFriendsStore.getState()).toMatchObject({ friends: [], incoming: [], outgoing: [], blocked: [] });
+
     useAuthStore.setState({ authUser: null, socket: null });
     expect(socket.off).toHaveBeenCalledWith('friend:request', expect.any(Function));
 

@@ -274,3 +274,40 @@ export function createPasswordChangedEmail({ name, email, changedAt }) {
 
   return { subject, html, text };
 }
+
+// Sent to the address the account had, after everything else is gone.
+export function createAccountDeletedEmail({ name, email, deletedAt }) {
+  const hi = escapeHtml(firstName(name));
+  const when = changeTime(deletedAt);
+  const subject = "Your Convo account was deleted";
+  const what =
+    "Your profile, photo, friends, settings and the files you sent are gone. Messages you sent stay in the other person's conversation, shown as from \"Deleted account\".";
+  const notYou =
+    "If you didn't do this, someone else knew your password. You can sign up again with this email at any time.";
+
+  const html = layout({
+    title: subject,
+    preview: `Your Convo account was deleted on ${when}.`,
+    reason: reasonFor(email, "it belonged to a Convo account"),
+    content: `
+      ${heading("Your account was deleted")}
+      ${paragraph(`Hi ${hi},`)}
+      ${paragraph(`The Convo account for <strong style="color:${TEXT};">${escapeHtml(email)}</strong> was deleted on ${escapeHtml(when)}.`)}
+      ${paragraph(escapeHtml(what))}
+      ${paragraph(escapeHtml(notYou), { margin: "0" })}`,
+  });
+
+  const text = [
+    `Hi ${firstName(name)},`,
+    "",
+    `The Convo account for ${email} was deleted on ${when}.`,
+    "",
+    what,
+    "",
+    notYou,
+    "",
+    "— Convo",
+  ].join("\n");
+
+  return { subject, html, text };
+}

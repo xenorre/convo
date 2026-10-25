@@ -14,7 +14,8 @@ const itemClass = `${itemBase} text-slate-200`;
 const dangerItemClass = `${itemBase} text-red-300`;
 
 // "⋯" in the conversation header: add friend, mute, hide, block or unblock
-// this person, or delete the chat.
+// this person, or delete the chat. A deleted account can only be hidden or
+// deleted: nothing new can come from it.
 function ConversationMenu({ user }: { user: Contact }) {
   const { sendRequest, acceptRequest, unblockUser } = useFriendsStore();
   const { state, request } = useRelationship(user._id);
@@ -107,6 +108,29 @@ function ConversationMenu({ user }: { user: Contact }) {
                 </button>
               ))}
             </div>
+          ) : user.deleted ? (
+            <>
+              {chat && (
+                <button
+                  type="button"
+                  className={itemClass}
+                  disabled={isBusy}
+                  onClick={() => run(() => (chat.hidden ? unhideChat(user) : hideChat(user)))}
+                >
+                  {chat.hidden ? "Unhide chat" : "Hide chat"}
+                </button>
+              )}
+              <button
+                type="button"
+                className={dangerItemClass}
+                onClick={() => {
+                  setView("closed");
+                  setIsDeleting(true);
+                }}
+              >
+                Delete chat
+              </button>
+            </>
           ) : (
             <>
               {state === "none" && (

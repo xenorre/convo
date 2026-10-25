@@ -7,6 +7,11 @@ export const SESSION_REVOKED = Object.freeze({
     "You have been signed out because your account was signed in on another device.",
 });
 
+export const ACCOUNT_DELETED = Object.freeze({
+  code: "ACCOUNT_DELETED",
+  message: "This account was deleted.",
+});
+
 export const createSessionId = () => randomUUID();
 
 export const hasActiveSession = (user, sessionId) =>
