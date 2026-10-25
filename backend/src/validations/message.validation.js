@@ -9,6 +9,13 @@ export const messageEditSchema = z
   })
   .strict();
 
+export const messagePageQuerySchema = z
+  .object({
+    before: z.string().min(1).max(100).optional(),
+    limit: z.coerce.number().int().min(1).max(50).optional(),
+  })
+  .strict();
+
 export const messageDeleteQuerySchema = z
   .object({
     for: z.enum(["me", "everyone"]).default("me"),

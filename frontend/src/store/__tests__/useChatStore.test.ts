@@ -814,3 +814,91 @@ describe('read receipts', () => {
     ]);
   });
 });
+
+describe('message history pages', () => {
+  const peer = 'peer-id';
+  // Message n, n minutes after 10:00.
+  const msg = (n: number): Message => ({
+    _id: `m${String(n).padStart(3, '0')}`,
+    senderId: peer,
+    receiverId: 'my-id',
+    text: `#${n}`,
+    createdAt: new Date(Date.UTC(2026, 9, 20, 10, n)).toISOString(),
+    updatedAt: new Date(Date.UTC(2026, 9, 20, 10, n)).toISOString(),
+  });
+  const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => msg(from + i));
+  const texts = () => useChatStore.getState().messages.map((m) => m.text);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useChatStore.setState(useChatStore.getInitialState(), true);
+    useAuthStore.setState({ authUser: { _id: 'my-id', fullName: 'Me', email: 'me@example.com', profilePic: '' } });
+  });
+
+  it('opens on the newest page and loads older ones before it, without repeats', async () => {
+    vi.mocked(apiService.get)
+      .mockResolvedValueOnce({ messages: range(71, 100), hasMore: true, nextCursor: 'c71' })
+      .mockResolvedValueOnce({ messages: range(41, 71), hasMore: true, nextCursor: 'c41' })
+      .mockResolvedValueOnce({ messages: range(1, 40), hasMore: false, nextCursor: null });
+
+    await useChatStore.getState().getMessagesByUserId(peer);
+    expect(texts()).toEqual(range(71, 100).map((m) => m.text));
+    expect(useChatStore.getState()).toMatchObject({ hasMoreMessages: true, messagesCursor: 'c71', messagesFor: peer });
+
+    await useChatStore.getState().loadOlderMessages();
+    expect(apiService.get).toHaveBeenLastCalledWith(`/messages/${peer}`, { params: { before: 'c71' } });
+    await useChatStore.getState().loadOlderMessages();
+
+    // #71 came twice (a message on the page edge); it is shown once.
+    expect(texts()).toEqual(range(1, 100).map((m) => m.text));
+    expect(useChatStore.getState()).toMatchObject({ hasMoreMessages: false, messagesCursor: null });
+
+    await useChatStore.getState().loadOlderMessages();
+    expect(apiService.get).toHaveBeenCalledTimes(3);
+  });
+
+  it('asks for one older page at a time', async () => {
+    useChatStore.setState({ messagesFor: peer, messages: range(71, 100), hasMoreMessages: true, messagesCursor: 'c71' });
+    let finish!: (value: unknown) => void;
+    vi.mocked(apiService.get).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+
+    const first = useChatStore.getState().loadOlderMessages();
+    void useChatStore.getState().loadOlderMessages();
+    finish({ messages: range(41, 70), hasMore: true, nextCursor: 'c41' });
+    await first;
+
+    expect(apiService.get).toHaveBeenCalledTimes(1);
+    expect(useChatStore.getState().isLoadingOlderMessages).toBe(false);
+  });
+
+  it('refreshing the open conversation keeps the older pages already loaded', async () => {
+    useChatStore.setState({ messagesFor: peer, messages: range(1, 100), hasMoreMessages: false, messagesCursor: null });
+    vi.mocked(apiService.get).mockResolvedValueOnce({ messages: [...range(72, 100), msg(101)], hasMore: true, nextCursor: 'c72' });
+
+    await useChatStore.getState().getMessagesByUserId(peer);
+
+    expect(texts()).toEqual(range(1, 101).map((m) => m.text));
+    // Everything older is loaded already.
+    expect(useChatStore.getState()).toMatchObject({ hasMoreMessages: false, isMessagesLoading: false });
+  });
+
+  it('a page that arrives after another conversation was opened is dropped', async () => {
+    let finish!: (value: unknown) => void;
+    vi.mocked(apiService.get).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const slow = useChatStore.getState().getMessagesByUserId(peer);
+
+    vi.mocked(apiService.get).mockResolvedValueOnce({ messages: [msg(1)], hasMore: false, nextCursor: null });
+    await useChatStore.getState().getMessagesByUserId('someone-else');
+    finish({ messages: range(71, 100), hasMore: true, nextCursor: 'c71' });
+    await slow;
+
+    expect(useChatStore.getState()).toMatchObject({ messagesFor: 'someone-else', hasMoreMessages: false });
+    expect(texts()).toEqual(['#1']);
+  });
+
+  it('closing the conversation forgets its pages', () => {
+    useChatStore.setState({ selectedUser: sender, messagesFor: sender._id, messages: range(1, 3), hasMoreMessages: true, messagesCursor: 'c1' });
+    useChatStore.getState().minimizeChat();
+    expect(useChatStore.getState()).toMatchObject({ messages: [], messagesFor: null, hasMoreMessages: false, messagesCursor: null });
+  });
+});

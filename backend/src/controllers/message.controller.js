@@ -4,17 +4,23 @@ import { messagePermission, readReceiptsBetween } from "#src/services/privacy.se
 import { uploadMessageFile } from "#src/services/storage.service.js";
 import {
   MESSAGE_ERRORS,
+  decodeMessageCursor,
+  loadConversationPage,
   deleteMessageForEveryone,
   deleteMessageForMe,
   editMessage as editMessageText,
   viewersOf,
 } from "#src/services/message.service.js";
-import { chatMuteSchema, messageDeleteQuerySchema, messageEditSchema } from "#validations/message.validation.js";
+import {
+  chatMuteSchema,
+  messageDeleteQuerySchema,
+  messageEditSchema,
+  messagePageQuerySchema,
+} from "#validations/message.validation.js";
 import { formatValidationError } from "#src/utils/format.js";
 import {
   CHAT_ERRORS,
   deleteChatForUser,
-  getChatDeletedBefore,
   getChatSummaries,
   hideChat as hideChatFor,
   unhideChat as unhideChatFor,
@@ -39,35 +45,27 @@ const forViewer = (json, viewerId, showReceipts) =>
 const receiptsShownFor = (message) =>
   message.readAt ? readReceiptsBetween(message.senderId, message.receiverId) : Promise.resolve(true);
 
+// The newest page of a conversation, or with `before` the page older than
+// what is loaded, so long histories load as the user scrolls up.
 export const getMessagesById = async (req, res) => {
+  const query = messagePageQuerySchema.safeParse(req.query ?? {});
+  const before = query.success && query.data.before ? decodeMessageCursor(query.data.before) : null;
+  if (!query.success || (query.data.before && !before)) {
+    return res.status(400).json({ error: "Invalid page", code: "MESSAGE_PAGE_INVALID", requestId: req.requestId });
+  }
+
   try {
     const myId = req.user._id;
     const { id: userToChatId } = req.params;
+    const page = await loadConversationPage(myId, userToChatId, { before, limit: query.data.limit });
 
-    // A chat deleted earlier only shows what came after.
-    const deletedBefore = await getChatDeletedBefore(myId, userToChatId);
-    const message = await Message.find({
-      $or: [
-        {
-          senderId: myId,
-          receiverId: userToChatId,
-        },
-        {
-          senderId: userToChatId,
-          receiverId: myId,
-        },
-      ],
-      hiddenFor: { $ne: myId },
-      ...(deletedBefore && { createdAt: { $gt: deletedBefore } }),
-    })
-      // Without an explicit sort MongoDB returns index order, not chronology.
-      .sort({ createdAt: 1, _id: 1 });
-
-    const hasReadReceipts = message.some((msg) => String(msg.senderId) === String(myId) && msg.readAt);
+    const hasReadReceipts = page.messages.some((msg) => String(msg.senderId) === String(myId) && msg.readAt);
     const showReceipts = !hasReadReceipts || (await readReceiptsBetween(myId, userToChatId));
 
     res.status(200).json({
-      messages: showReceipts ? message : message.map((msg) => forViewer(toJson(msg), myId, false)),
+      messages: showReceipts ? page.messages : page.messages.map((msg) => forViewer(toJson(msg), myId, false)),
+      hasMore: page.hasMore,
+      nextCursor: page.nextCursor,
       requestId: req.requestId,
     });
   } catch (e) {

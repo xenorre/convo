@@ -93,9 +93,10 @@ const conversation = () => [
   new Message({ _id: "507f1f77bcf86cd7994390a2", senderId: peer, receiverId: me, text: "theirs", readAt }),
 ];
 const loadConversation = async () => {
-  mock.method(Message, "find", () => ({ sort: () => Promise.resolve(conversation()) }));
+  // The database answers newest first.
+  mock.method(Message, "find", () => ({ sort: () => ({ limit: () => Promise.resolve(conversation().reverse()) }) }));
   const res = response();
-  await getMessagesById({ user: { _id: me }, params: { id: peer }, requestId: "req" }, res);
+  await getMessagesById({ user: { _id: me }, params: { id: peer }, query: {}, requestId: "req" }, res);
   return res.body.messages;
 };
 

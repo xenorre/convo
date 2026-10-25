@@ -39,6 +39,13 @@ export interface ChatStore {
   typingUsers: Record<string, true>;
   isUsersLoading: boolean;
   isMessagesLoading: boolean;
+  // Who `messages` belong to; the newest page is loaded first, older ones
+  // as the user scrolls up.
+  messagesFor: string | null;
+  hasMoreMessages: boolean;
+  // Where the next older page starts (opaque, from the server).
+  messagesCursor: string | null;
+  isLoadingOlderMessages: boolean;
   socketBound: boolean;
   boundSocket: AppSocket | null;
   unbindSocket: (() => void) | null;
@@ -50,7 +57,11 @@ export interface ChatStore {
   setConversationVisible: (visible: boolean) => void;
   isReadingConversation: (userId: string) => boolean;
   getMyChatPartners: () => Promise<void>;
+  // Loads the newest page. For the conversation already shown (after
+  // reconnecting, say) it refreshes that page and keeps older ones loaded.
   getMessagesByUserId: (userId: string) => Promise<void>;
+  // Adds the page before the oldest loaded message, if there is one.
+  loadOlderMessages: () => Promise<void>;
   markRead: (userId: string) => Promise<void>;
   // Deletes the whole history with this person for the current user.
   deleteChat: (user: Contact) => Promise<boolean>;

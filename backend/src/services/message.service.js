@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Message from "#src/models/message.model.js";
 import User from "#src/models/user.model.js";
 import { getChatDeletedBefore } from "#src/services/chat.service.js";
@@ -19,6 +20,54 @@ export const MESSAGE_ERRORS = Object.freeze({
 });
 
 const sameId = (a, b) => String(a) === String(b);
+
+// A conversation loads newest first, this many messages at a time.
+export const MESSAGE_PAGE_SIZE = 30;
+export const MESSAGE_PAGE_MAX = 50;
+
+// Where the next (older) page starts: the oldest loaded message's time and
+// id. A position rather than a page number, so messages arriving meanwhile
+// don't shift what comes next. Opaque to the client.
+export const encodeMessageCursor = (message) =>
+  Buffer.from(`${new Date(message.createdAt).getTime()}:${message._id}`).toString("base64url");
+
+// null when the cursor wasn't made by encodeMessageCursor.
+export const decodeMessageCursor = (cursor) => {
+  const [time, id, extra] = Buffer.from(String(cursor), "base64url").toString("utf8").split(":");
+  if (extra !== undefined || !/^\d{1,15}$/.test(time ?? "") || !mongoose.isObjectIdOrHexString(id)) return null;
+  return { createdAt: new Date(Number(time)), _id: new mongoose.Types.ObjectId(id) };
+};
+
+// One page of a conversation as `viewerId` sees it, oldest first, plus
+// whether anything older is left. `before` is a decoded cursor or null for
+// the newest page. Uses the { senderId|receiverId, createdAt, _id } indexes.
+export const loadConversationPage = async (viewerId, peerId, { before = null, limit = MESSAGE_PAGE_SIZE } = {}) => {
+  // A chat deleted earlier only shows what came after.
+  const deletedBefore = await getChatDeletedBefore(viewerId, peerId);
+  const newestFirst = await Message.find({
+    $or: [
+      { senderId: viewerId, receiverId: peerId },
+      { senderId: peerId, receiverId: viewerId },
+    ],
+    hiddenFor: { $ne: viewerId },
+    ...(deletedBefore && { createdAt: { $gt: deletedBefore } }),
+    // Same time, lower id: messages saved in the same millisecond still page.
+    ...(before && {
+      $and: [{
+        $or: [
+          { createdAt: { $lt: before.createdAt } },
+          { createdAt: before.createdAt, _id: { $lt: before._id } },
+        ],
+      }],
+    }),
+  })
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1);
+
+  const hasMore = newestFirst.length > limit;
+  const messages = newestFirst.slice(0, limit).reverse();
+  return { messages, hasMore, nextCursor: hasMore ? encodeMessageCursor(messages[0]) : null };
+};
 
 export const otherParticipant = (message, userId) =>
   sameId(message.senderId, userId) ? message.receiverId : message.senderId;

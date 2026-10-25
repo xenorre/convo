@@ -127,18 +127,25 @@ test("aggregation failure returns 500 without leaking the error", async () => {
   assert.deepEqual(res.body, { error: "Internal server error", requestId: "req-3" });
 });
 
-test("conversation messages are explicitly sorted oldest first", async () => {
-  const messages = [{ _id: "m1" }, { _id: "m2" }];
+test("a conversation loads its newest page on the indexed keys and returns it oldest first", async () => {
+  const createdAt = new Date("2026-10-20T10:00:00Z");
+  const newestFirst = [{ _id: "507f1f77bcf86cd7994390b2", createdAt }, { _id: "507f1f77bcf86cd7994390b1", createdAt }];
   let sortedBy;
+  let limitedTo;
   mock.method(Message, "find", () => ({
-    sort(order) { sortedBy = order; return Promise.resolve(messages); },
+    sort(order) {
+      sortedBy = order;
+      return { limit(count) { limitedTo = count; return Promise.resolve(newestFirst); } };
+    },
   }));
 
   const res = response();
-  await getMessagesById({ user: { _id: myId }, params: { id: partnerId }, requestId: "req-4" }, res);
+  await getMessagesById({ user: { _id: myId }, params: { id: partnerId }, query: {}, requestId: "req-4" }, res);
 
-  assert.deepEqual(sortedBy, { createdAt: 1, _id: 1 });
-  assert.deepEqual(res.body, { messages, requestId: "req-4" });
+  assert.deepEqual(sortedBy, { createdAt: -1, _id: -1 });
+  // One more than a page, to tell whether anything older is left.
+  assert.equal(limitedTo, 31);
+  assert.deepEqual(res.body, { messages: [...newestFirst].reverse(), hasMore: false, nextCursor: null, requestId: "req-4" });
 });
 
 test("messages from a deleted chat are skipped before the list is grouped", async () => {
@@ -163,10 +170,10 @@ test("a deleted conversation only loads messages sent after the deletion", async
   let filter;
   mock.method(Message, "find", (query) => {
     filter = query;
-    return { sort: () => Promise.resolve([]) };
+    return { sort: () => ({ limit: () => Promise.resolve([]) }) };
   });
 
-  await getMessagesById({ user: { _id: myId }, params: { id: partnerId }, requestId: "req-6" }, response());
+  await getMessagesById({ user: { _id: myId }, params: { id: partnerId }, query: {}, requestId: "req-6" }, response());
 
   assert.deepEqual(filter.createdAt, { $gt: deletedBefore });
 });

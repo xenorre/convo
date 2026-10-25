@@ -118,6 +118,22 @@ const withLatestMessage = (chats: ChatSummary[], partner: Contact, message: Mess
     .sort((a, b) => lastActivity(b) - lastActivity(a));
 };
 
+// What a closed conversation leaves behind: nothing loaded.
+const NO_CONVERSATION = {
+  messages: [],
+  messagesFor: null,
+  hasMoreMessages: false,
+  messagesCursor: null,
+  isLoadingOlderMessages: false,
+} satisfies Partial<ChatStore>;
+
+// Whether `message` comes before `other` in the conversation; ids break ties
+// within one millisecond, as on the server.
+const isOlder = (message: Message, other: Message) => {
+  const difference = Date.parse(message.createdAt) - Date.parse(other.createdAt);
+  return difference < 0 || (difference === 0 && message._id < other._id);
+};
+
 // Takes a deleted chat out of the list and closes it if it is open.
 const withoutChat = (state: ChatStore, userId: string, deletedBefore: string): Partial<ChatStore> => {
   const unreadCounts = { ...state.unreadCounts };
@@ -129,14 +145,14 @@ const withoutChat = (state: ChatStore, userId: string, deletedBefore: string): P
     deletedChats: { ...state.deletedChats, [userId]: deletedBefore },
     minimizedChats: state.minimizedChats.filter((chat) => String(chat._id) !== userId),
     drafts: withoutKey(state.drafts, userId),
-    ...(isOpen && { selectedUser: null, messages: [] }),
+    ...(isOpen && { selectedUser: null, ...NO_CONVERSATION }),
   };
 };
 
 // Marks a chat hidden or not; hiding the open one also closes it.
 const withHiddenChat = (state: ChatStore, userId: string, hidden: boolean): Partial<ChatStore> => ({
   chats: state.chats.map((chat) => (String(chat._id) === userId ? withHidden(chat, hidden) : chat)),
-  ...(hidden && String(state.selectedUser?._id) === userId && { selectedUser: null, messages: [] }),
+  ...(hidden && String(state.selectedUser?._id) === userId && { selectedUser: null, ...NO_CONVERSATION }),
 });
 
 // At most this many conversations wait in the minimized bar.
@@ -201,6 +217,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   typingUsers: {},
   isUsersLoading: false,
   isMessagesLoading: false,
+  messagesFor: null,
+  hasMoreMessages: false,
+  messagesCursor: null,
+  isLoadingOlderMessages: false,
   socketBound: false,
   boundSocket: null,
   unbindSocket: null,
@@ -240,7 +260,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         toContact(selectedUser),
       ].slice(-MAX_MINIMIZED_CHATS),
       selectedUser: null,
-      messages: [],
+      ...NO_CONVERSATION,
     }));
   },
 
@@ -271,21 +291,54 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   getMessagesByUserId: async (userId) => {
     const sessionVersion = getAuthSessionVersion();
-    set({ isMessagesLoading: true });
+    // Shown already: refresh quietly, without the skeleton or losing older pages.
+    const isRefresh = get().messagesFor === userId && get().messages.length > 0;
+    if (!isRefresh) set({ ...NO_CONVERSATION, messagesFor: userId, isMessagesLoading: true });
     try {
       const response = await apiService.get<MessagesResponse>(`/messages/${userId}`);
-      if (!isCurrentAuthSession(sessionVersion)) return;
-      // Extract messages array from API response
-      const messagesData = response?.messages || [];
-      const messages = Array.isArray(messagesData) ? messagesData : [];
-      set({ messages });
+      // Another conversation was opened meanwhile.
+      if (!isCurrentAuthSession(sessionVersion) || get().messagesFor !== userId) return;
+      const page: Message[] = Array.isArray(response?.messages) ? response.messages : [];
+      const pageState = { hasMoreMessages: Boolean(response?.hasMore), messagesCursor: response?.nextCursor ?? null };
+      set((state) => {
+        const oldest = page[0];
+        // Older messages loaded earlier stay, unless the newest page is all there is.
+        const older = isRefresh && oldest && pageState.hasMoreMessages
+          ? state.messages.filter((msg) => isOlder(msg, oldest))
+          : [];
+        return older.length > 0 ? { messages: [...older, ...page] } : { messages: page, ...pageState };
+      });
     } catch (e) {
-      if (!isCurrentAuthSession(sessionVersion)) return;
+      if (!isCurrentAuthSession(sessionVersion) || get().messagesFor !== userId) return;
       handleStoreError(e, "Failed to load messages");
-      // Set empty array on error to prevent map errors
-      set({ messages: [] });
+      if (!isRefresh) set({ messages: [] });
     } finally {
-      if (isCurrentAuthSession(sessionVersion)) set({ isMessagesLoading: false });
+      if (isCurrentAuthSession(sessionVersion) && get().messagesFor === userId) set({ isMessagesLoading: false });
+    }
+  },
+
+  loadOlderMessages: async () => {
+    const { messagesFor: userId, messagesCursor: before, hasMoreMessages, isLoadingOlderMessages } = get();
+    if (!userId || !before || !hasMoreMessages || isLoadingOlderMessages) return;
+    const sessionVersion = getAuthSessionVersion();
+    const isStillOpen = () => isCurrentAuthSession(sessionVersion) && get().messagesFor === userId;
+    set({ isLoadingOlderMessages: true });
+    try {
+      const response = await apiService.get<MessagesResponse>(`/messages/${userId}`, { params: { before } });
+      if (!isStillOpen()) return;
+      const page: Message[] = Array.isArray(response?.messages) ? response.messages : [];
+      set((state) => {
+        const loaded = new Set(state.messages.map((msg) => msg._id));
+        return {
+          messages: [...page.filter((msg) => !loaded.has(msg._id)), ...state.messages],
+          hasMoreMessages: Boolean(response?.hasMore),
+          messagesCursor: response?.nextCursor ?? null,
+        };
+      });
+    } catch (e) {
+      if (isStillOpen()) handleStoreError(e, "Couldn't load older messages");
+    } finally {
+      if (isStillOpen()) set({ isLoadingOlderMessages: false });
     }
   },
 

@@ -95,6 +95,9 @@ export interface MessagesResponse {
     createdAt: string;
     updatedAt: string;
   }>;
+  // Whether older messages are left, and where they start.
+  hasMore?: boolean;
+  nextCursor?: string | null;
   requestId: string;
 }
 

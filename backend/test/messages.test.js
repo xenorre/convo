@@ -274,8 +274,8 @@ test("lists and conversations leave out messages I deleted, and deleted ones don
   let filter;
   mock.method(Message, "find", (query) => {
     filter = query;
-    return { sort: () => Promise.resolve([]) };
+    return { sort: () => ({ limit: () => Promise.resolve([]) }) };
   });
-  await getMessagesById({ user: { _id: me }, params: { id: peer }, requestId: "req" }, response());
+  await getMessagesById({ user: { _id: me }, params: { id: peer }, query: {}, requestId: "req" }, response());
   assert.deepEqual(filter.hiddenFor, { $ne: me });
 });
