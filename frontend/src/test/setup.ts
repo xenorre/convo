@@ -54,10 +54,10 @@ globalThis.FileReader = class {
   onloadend: (() => void) | null = null;
   result: string | ArrayBuffer | null = null;
   
-  readAsDataURL(_file: File) {
+  readAsDataURL() {
     setTimeout(() => {
       this.result = `data:image/jpeg;base64,${btoa('mock-image')}`;
       this.onloadend?.();
     });
   }
-} as any;
+} as unknown as typeof FileReader;

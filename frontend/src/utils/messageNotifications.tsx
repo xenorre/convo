@@ -1,7 +1,6 @@
-import { ArrowRight, MessageCircle } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { MessageCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import type { Toast } from 'react-hot-toast';
+import MessageNotification from '@/components/MessageNotification';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { showSystemNotification } from '@/utils/systemNotifications';
 
@@ -12,36 +11,6 @@ interface IncomingMessageOptions {
   senderName: string;
   preview: string;
   onOpen: () => void;
-}
-
-function MessageNotification({
-  notification,
-  senderName,
-  preview,
-  onOpen,
-}: Omit<IncomingMessageOptions, 'messageId'> & { notification: Toast }) {
-  const navigate = useNavigate();
-
-  const openChat = () => {
-    onOpen();
-    navigate('/');
-    toast.dismiss(notification.id);
-  };
-
-  return (
-    <button
-      type="button"
-      className="app-toast__action"
-      aria-label={`Open chat with ${senderName}. ${preview}`}
-      disabled={!notification.visible}
-      onClick={openChat}
-    >
-      <span className="font-medium text-slate-200">{senderName}</span>: {preview}
-      <span className="app-toast__action-hint" aria-hidden="true">
-        Open chat <ArrowRight size={13} />
-      </span>
-    </button>
-  );
 }
 
 export function notifyIncomingMessage({ messageId, ...options }: IncomingMessageOptions) {

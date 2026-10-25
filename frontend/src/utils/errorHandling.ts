@@ -7,7 +7,7 @@ export interface ApiError {
   message: string;
   status: number;
   code?: string;
-  details?: any;
+  details?: unknown;
 }
 
 export const createApiError = (error: unknown): ApiError => {

@@ -27,6 +27,30 @@ const loadSocketClient = () => socketClientModule ??= import('socket.io-client')
   throw error;
 });
 
+let stopRetryingNow: (() => void) | undefined;
+
+// The socket keeps retrying on its own, but between tries it waits up to
+// reconnectionDelayMax. When the network returns or the tab comes back to the
+// front (after sleep or background throttling), try again right away.
+const retryNowWhenBack = (socket: AppSocket) => {
+  const retryNow = () => {
+    // `active` is false once the server closed the connection on purpose
+    // (e.g. a revoked session); that one must stay closed.
+    if (socket.connected || !socket.active) return;
+    socket.disconnect();
+    socket.connect();
+  };
+  const onVisible = () => {
+    if (document.visibilityState === 'visible') retryNow();
+  };
+  window.addEventListener('online', retryNow);
+  document.addEventListener('visibilitychange', onVisible);
+  return () => {
+    window.removeEventListener('online', retryNow);
+    document.removeEventListener('visibilitychange', onVisible);
+  };
+};
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   authUser: null,
   isCheckingAuth: true,
@@ -207,7 +231,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        reconnectionAttempts: 5,
+        // Keep trying until logout: a chat must recover after sleep or a long outage.
+        reconnectionAttempts: Infinity,
         timeout: 20000,
         forceNew: false,
         autoConnect: false,
@@ -232,6 +257,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           );
         }
       });
+      stopRetryingNow = retryNowWhenBack(socket);
       socket.connect();
     }).catch(error => {
       if (isCurrentConnection()) handleStoreError(error, 'Could not connect to chat. Please reload the page.');
@@ -250,6 +276,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   disconnectSocket: () => {
     latestSocketConnection++;
     pendingSocketConnection = undefined;
+    stopRetryingNow?.();
+    stopRetryingNow = undefined;
     const socket = get().socket;
     set({ socket: null, onlineUsers: [] });
     if (!socket) return;

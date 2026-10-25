@@ -42,6 +42,8 @@ export const useConnectionStatus = () => {
       }));
     };
 
+    // Reconnection is run by the socket's Manager (`socket.io`), which is
+    // where its events fire; the socket itself never emits them.
     const handleReconnecting = () => {
       setStatus(prev => ({
         ...prev,
@@ -50,7 +52,7 @@ export const useConnectionStatus = () => {
       }));
     };
 
-    const handleReconnectError = () => {
+    const handleReconnectFailed = () => {
       setStatus(prev => ({
         ...prev,
         isReconnecting: false,
@@ -75,16 +77,16 @@ export const useConnectionStatus = () => {
     // Listen to socket events
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
-    (socket as any).on('reconnecting', handleReconnecting);
-    (socket as any).on('reconnect_error', handleReconnectError);
     socket.on('connect_error', handleError);
+    socket.io.on('reconnect_attempt', handleReconnecting);
+    socket.io.on('reconnect_failed', handleReconnectFailed);
 
     return () => {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
-      (socket as any).off('reconnecting', handleReconnecting);
-      (socket as any).off('reconnect_error', handleReconnectError);
       socket.off('connect_error', handleError);
+      socket.io.off('reconnect_attempt', handleReconnecting);
+      socket.io.off('reconnect_failed', handleReconnectFailed);
     };
   }, [socket]);
 

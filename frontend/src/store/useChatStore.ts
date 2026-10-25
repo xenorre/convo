@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { useAuthStore } from "./useAuthStore";
 import type { Message } from "@/types/message";
 import type { Contact } from "@/types/auth";
+import type { ServerToClientEvents } from "@/types/socket";
 import { createApiError, handleStoreError } from "@/utils/errorHandling";
 import { notifyIncomingMessage } from "@/utils/messageNotifications";
 import { isWindowInView } from "@/utils/windowAttention";
@@ -40,7 +41,14 @@ const normalizeId = (id: unknown): string => {
   }
 };
 
-const normalizeMessage = (msg: any): Message => ({
+// Any message-shaped payload; fields are checked before use.
+type RawMessage = Partial<Record<keyof Message, unknown>>;
+
+// Socket payloads sometimes carry the sender populated in place of its id.
+const populatedSender = (senderId: unknown): Partial<Contact> | undefined =>
+  senderId && typeof senderId === "object" ? (senderId as Partial<Contact>) : undefined;
+
+const normalizeMessage = (msg: RawMessage): Message => ({
   _id: normalizeId(msg._id),
   senderId: normalizeId(msg.senderId),
   receiverId: normalizeId(msg.receiverId),
@@ -276,7 +284,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((state) => ({
         unreadCounts: { ...state.unreadCounts, [userId]: 0 },
       }));
-    } catch (e) {
+    } catch {
       // Non-fatal; ignore errors
     }
   },
@@ -470,9 +478,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (!isCurrentAuthSession(sessionVersion)) return;
 
       // Handle different API response structures
-      const messageFromAPI = (res && typeof res === 'object' && 'message' in res) 
-        ? (res as { message: unknown }).message 
-        : res;
+      const messageFromAPI = ((res && typeof res === 'object' && 'message' in res)
+        ? (res as { message: unknown }).message
+        : res) as RawMessage;
 
       // Normalize and replace optimistic message with real message from API
       const normalized = normalizeMessage(messageFromAPI);
@@ -506,11 +514,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       && get().boundSocket === socket && useAuthStore.getState().socket === socket
       && Boolean(useAuthStore.getState().authUser);
 
-    const onMessage = (newMessage: any) => {
-      if (!isActiveSocket()) return;
-      const raw = (newMessage && typeof newMessage === 'object' && 'message' in newMessage)
-        ? newMessage.message
-        : newMessage;
+    const onMessage = (newMessage: Parameters<ServerToClientEvents["newMessage"]>[0]) => {
+      if (!isActiveSocket() || !newMessage || typeof newMessage !== 'object') return;
+      const raw = 'message' in newMessage ? newMessage.message : newMessage;
       const actualMessage = normalizeMessage(raw);
 
       // The message they were typing has arrived.
@@ -525,8 +531,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const senderId = actualMessage.senderId;
       const knownSender = chats.find(chat => String(chat._id) === senderId)
         || useFriendsStore.getState().friends.find(friend => String(friend._id) === senderId);
-      const senderSnapshot = newMessage?.sender
-        || (typeof raw.senderId === 'object' ? raw.senderId : undefined);
+      const senderSnapshot = ('sender' in newMessage ? newMessage.sender : undefined)
+        || populatedSender(raw.senderId);
       const sender: Contact = {
         _id: senderId,
         fullName: senderSnapshot?.fullName || knownSender?.fullName || 'New message',

@@ -281,6 +281,66 @@ describe('session termination', () => {
   });
 });
 
+describe('reconnecting', () => {
+  // A socket that lost its connection and is waiting to retry.
+  const connectRetryingSocket = async () => {
+    const socket = Object.assign(createSocket(), { active: true });
+    vi.mocked(io).mockReturnValueOnce(socket as unknown as ReturnType<typeof io>);
+    useAuthStore.setState({ authUser: user });
+    await useAuthStore.getState().connectSocket();
+    socket.connect.mockClear();
+    return socket;
+  };
+
+  const setVisibility = (state: DocumentVisibilityState) =>
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+
+  it('keeps retrying until logout instead of giving up', async () => {
+    await connectRetryingSocket();
+    expect(vi.mocked(io).mock.calls[0][1]).toMatchObject({ reconnection: true, reconnectionAttempts: Infinity });
+  });
+
+  it('retries right away when the network returns or the tab comes back to the front', async () => {
+    const socket = await connectRetryingSocket();
+
+    window.dispatchEvent(new Event('online'));
+    expect(socket.disconnect).toHaveBeenCalledOnce();
+    expect(socket.connect).toHaveBeenCalledOnce();
+
+    setVisibility('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(socket.connect).toHaveBeenCalledOnce();
+
+    setVisibility('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(socket.connect).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves a working connection, or one the server closed on purpose, alone', async () => {
+    const socket = await connectRetryingSocket();
+    socket.connected = true;
+    window.dispatchEvent(new Event('online'));
+
+    socket.connected = false;
+    socket.active = false;
+    window.dispatchEvent(new Event('online'));
+
+    expect(socket.connect).not.toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('stops listening after logout', async () => {
+    const socket = await connectRetryingSocket();
+    useAuthStore.getState().disconnectSocket();
+    socket.disconnect.mockClear();
+
+    window.dispatchEvent(new Event('online'));
+
+    expect(socket.connect).not.toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
+  });
+});
+
 describe('email confirmation', () => {
   it('sign-up waits for the email to be confirmed instead of signing in', async () => {
     vi.mocked(apiService.post).mockResolvedValueOnce({ status: 'verification_required', email: 'new@example.com' });
