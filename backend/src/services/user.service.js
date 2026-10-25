@@ -44,7 +44,7 @@ export const updateUserProfileImage = async (userId, fileData) => {
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { profilePic: newImageUrl },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).select("-password");
 
     await deleteStoredProfileImage(userId, oldProfilePic);
@@ -78,7 +78,7 @@ export const removeUserProfileImage = async (userId) => {
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { profilePic: DEFAULT_PROFILE_PIC },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).select("-password");
 
     await deleteStoredProfileImage(userId, oldProfilePic);
@@ -117,7 +117,7 @@ export const updateUserProfile = async (userId, updateData) => {
     const { password, profilePic, email, ...safeUpdateData } = updateData;
 
     const updatedUser = await User.findByIdAndUpdate(userId, safeUpdateData, {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     }).select("-password");
 

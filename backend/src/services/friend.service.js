@@ -80,7 +80,7 @@ const accept = (requestId, filter = {}) =>
   Friendship.findOneAndUpdate(
     { _id: requestId, status: "pending", ...filter },
     { $set: { status: "accepted", respondedAt: new Date() } },
-    { new: true }
+    { returnDocument: "after" }
   ).lean();
 
 // Returns { status: "requested", request, target } or, when the other person

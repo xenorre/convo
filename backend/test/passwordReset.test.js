@@ -176,7 +176,7 @@ test("a new password from the link signs in here and signs out every other sessi
 
   const [id, [{ $set }], options] = update.mock.calls[0].arguments;
   assert.equal(id, userId);
-  assert.deepEqual(options, { new: false });
+  assert.deepEqual(options, { returnDocument: "before", updatePipeline: true });
   // A pipeline would read the "$2b$..." hash as a field path without $literal.
   assert.ok(await bcrypt.compare(goodPassword, $set.password.$literal), "only the hash is stored");
   // An unconfirmed email counts as confirmed: the link was sent to it.

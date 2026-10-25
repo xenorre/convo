@@ -74,7 +74,7 @@ export const initializeSocketInfrastructure = () => {
         logger.info("Socket.IO Redis adapter and presence connected");
       } catch (error) {
         await Promise.allSettled(clients.map((client) =>
-          client.isOpen ? client.disconnect() : Promise.resolve()
+          client.isOpen ? client.destroy() : Promise.resolve()
         ));
         throw error;
       }

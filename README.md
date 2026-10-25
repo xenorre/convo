@@ -108,6 +108,7 @@ Frontend (Vite variables):
   - Lint: `npm run lint --prefix frontend`
   - Fix: `npm run lint:fix --prefix frontend`
   - Type-check: `npm run type-check --prefix frontend`
+  - Backend tests: `npm test --prefix backend` (unit, then integration against a throwaway MongoDB)
   - Tests (Vitest):
     - All: `npm test --prefix frontend`
     - Watch: `npm run test:watch --prefix frontend`

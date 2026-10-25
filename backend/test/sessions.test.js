@@ -132,7 +132,7 @@ test("atomic concurrent logins return only the actual preceding session IDs", as
   let current = "initial";
   mock.method(User, "findByIdAndUpdate", (id, update, options) => {
     assert.equal(id, userId);
-    assert.deepEqual(options, { new: false });
+    assert.deepEqual(options, { returnDocument: "before" });
     const previous = current;
     current = update.$set.activeSessionId;
     return { select: () => Promise.resolve({ activeSessionId: previous }) };

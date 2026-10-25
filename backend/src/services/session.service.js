@@ -25,7 +25,7 @@ export const activateSession = async (userId, sessionId) => {
   const previousUser = await User.findByIdAndUpdate(
     userId,
     { $set: { activeSessionId: sessionId } },
-    { new: false }
+    { returnDocument: "before" }
   ).select("+activeSessionId");
 
   if (!previousUser) throw new Error("User not found");

@@ -124,7 +124,7 @@ export const editMessage = async (userId, messageId, text, now = new Date()) => 
   const updated = await Message.findOneAndUpdate(
     { _id: message._id, senderId: userId, deletedAt: null, createdAt: { $gte: new Date(now - EDIT_WINDOW_MS) } },
     text ? { $set: { text, editedAt: now } } : { $set: { editedAt: now }, $unset: { text: 1 } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (!updated) throw new Error(MESSAGE_ERRORS.DELETED);
   return updated;
@@ -139,7 +139,7 @@ export const deleteMessageForEveryone = async (userId, messageId, now = new Date
   const before = await Message.findOneAndUpdate(
     { _id: message._id, senderId: userId, deletedAt: null },
     { $set: { deletedAt: now }, $unset: { text: 1, image: 1, editedAt: 1 } },
-    { new: false }
+    { returnDocument: "before" }
   );
   if (!before) return { message: await Message.findById(message._id), wasUnread: false };
 
@@ -156,7 +156,7 @@ export const deleteMessageForMe = async (userId, messageId) => {
   const updated = await Message.findOneAndUpdate(
     { _id: message._id, hiddenFor: { $ne: userId } },
     { $addToSet: { hiddenFor: userId } },
-    { new: true }
+    { returnDocument: "after" }
   );
   if (updated && updated.hiddenFor.some((id) => sameId(id, peerId))) {
     await Message.deleteOne({ _id: message._id });

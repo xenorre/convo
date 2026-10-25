@@ -64,7 +64,7 @@ export const confirmEmail = async (token, now = new Date()) => {
   return User.findByIdAndUpdate(
     pending.userId,
     { $set: { emailVerifiedAt: now } },
-    { new: true }
+    { returnDocument: "after" }
   );
 };
 
@@ -86,7 +86,9 @@ export const resendVerification = async (email, now = new Date()) => {
 export const markExistingAccountsVerified = async () => {
   const result = await User.updateMany(
     { emailVerifiedAt: { $exists: false } },
-    [{ $set: { emailVerifiedAt: { $ifNull: ["$createdAt", "$$NOW"] } } }]
+    [{ $set: { emailVerifiedAt: { $ifNull: ["$createdAt", "$$NOW"] } } }],
+    // A pipeline on purpose: it reads each account's own createdAt.
+    { updatePipeline: true }
   );
   logger.info("Marked existing accounts as email-confirmed", { updated: result.modifiedCount });
 };

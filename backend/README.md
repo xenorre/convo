@@ -95,7 +95,9 @@ package.json scripts (selected):
 
 - npm run dev — node --watch src/index.js
 - npm start — node src/index.js
-- npm test — Node built-in session/authentication tests (mocked database, no external services)
+- npm test — unit tests, then integration tests
+- npm run test:unit — Node built-in tests with the database stubbed; no external services
+- npm run test:integration — the real app over HTTP against a throwaway MongoDB (mongodb-memory-server, same version as the Docker images). The first run downloads the MongoDB binary (about 70 MB) into ~/.cache
 - npm run docker:build / docker:run / docker:stop
 - npm run compose:up|down|logs
 - npm run fullstack:up|down|logs
@@ -110,7 +112,7 @@ Helper scripts (scripts/):
 - test.sh — lint/tests/coverage/security (runs what’s available)
 - deploy.sh — build/tag/push and local deploy via compose.production
 
-Note: lint scripts remain placeholders; the session/authentication tests run with `npm test`.
+Note: lint scripts remain placeholders; all backend tests run with `npm test`.
 
 ## API Overview
 

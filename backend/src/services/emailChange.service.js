@@ -91,7 +91,7 @@ export const confirmEmailChange = async (token, now = new Date()) => {
     previous = await User.findOneAndUpdate(
       { _id: pending.userId, deletedAt: null },
       { $set: { email: pending.newEmail, emailVerifiedAt: now } },
-      { new: false }
+      { returnDocument: "before" }
     )
       .select("email fullName")
       .lean();

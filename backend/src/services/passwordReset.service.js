@@ -88,7 +88,8 @@ export const completePasswordReset = async (token, newPassword, nextSessionId, n
           emailVerifiedAt: { $ifNull: ["$emailVerifiedAt", now] },
         },
       }],
-      { new: false }
+      // Mongoose refuses update pipelines unless asked for one.
+      { returnDocument: "before", updatePipeline: true }
     )
       .select("email fullName profilePic +activeSessionId")
       .lean();

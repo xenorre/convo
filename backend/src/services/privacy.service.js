@@ -38,7 +38,7 @@ export const updatePrivacySettings = async (userId, changes) => {
   const $set = Object.fromEntries(
     Object.entries(changes).map(([key, value]) => [`privacy.${key}`, value])
   );
-  const user = await User.findByIdAndUpdate(userId, { $set }, { new: true, runValidators: true })
+  const user = await User.findByIdAndUpdate(userId, { $set }, { returnDocument: "after", runValidators: true })
     .select("privacy")
     .lean();
   if (!user) throw new Error(PRIVACY_ERRORS.USER_NOT_FOUND);
