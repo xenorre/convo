@@ -115,6 +115,17 @@ describe('LoginForm', () => {
   });
 });
 describe('LoginForm password visibility', () => {
+  it('offers a password reset, carrying over the email typed so far', async () => {
+    const user = userEvent.setup();
+    render(<LoginForm />);
+
+    await user.type(screen.getByPlaceholderText('johndoe@example.com'), 'ann@example.com');
+    await user.click(screen.getByRole('link', { name: 'Forgot password?' }));
+
+    expect(window.location.pathname).toBe('/forgot-password');
+    expect(window.history.state?.usr).toEqual({ email: 'ann@example.com' });
+  });
+
   it('can show the password while typing it', async () => {
     const user = userEvent.setup();
     render(<LoginForm />);

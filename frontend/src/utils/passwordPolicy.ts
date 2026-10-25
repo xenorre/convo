@@ -59,6 +59,17 @@ export const loadStrengthChecker = () => {
   return checker;
 };
 
+// The zxcvbn score for a submitted password, or undefined when the checker
+// can't load; the server still judges strength then.
+export const strengthScore = async (password: string, account: PasswordAccount) => {
+  try {
+    const check = await loadStrengthChecker();
+    return check(password, personalWords(account)).score;
+  } catch {
+    return undefined;
+  }
+};
+
 // The first rule a new password breaks, in the server's words, or null.
 // Strength is only judged once the checker has loaded (`score` given).
 export function passwordProblem(password: string, account: PasswordAccount, score?: number): string | null {

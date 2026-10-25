@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
+import { useCountdown } from "@/hooks/useCountdown";
 import { apiService } from "@/services/apiService";
 import { createApiError } from "@/utils/errorHandling";
 import { validateEmail } from "@/utils/sanitize";
@@ -15,15 +16,9 @@ interface ResendVerificationProps {
 // sent one, so this says only that a link is on its way if one was due.
 function ResendVerification({ email: knownEmail }: ResendVerificationProps) {
   const [email, setEmail] = useState(knownEmail ?? "");
-  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [secondsLeft, setSecondsLeft] = useCountdown();
   const [isSending, setIsSending] = useState(false);
   const [status, setStatus] = useState<{ tone: "info" | "error"; text: string } | null>(null);
-
-  useEffect(() => {
-    if (secondsLeft <= 0) return;
-    const timer = setTimeout(() => setSecondsLeft((left) => left - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [secondsLeft]);
 
   const send = async (event: FormEvent) => {
     event.preventDefault();

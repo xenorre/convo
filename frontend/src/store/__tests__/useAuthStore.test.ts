@@ -399,3 +399,50 @@ describe('email confirmation', () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 });
+
+describe('password reset', () => {
+  it('a new password from the link signs in and connects', async () => {
+    vi.mocked(apiService.post).mockResolvedValueOnce({ user });
+
+    expect(await useAuthStore.getState().resetPassword('token', 'copper-lantern-meadow-58')).toEqual({ kind: 'done' });
+
+    expect(apiService.post).toHaveBeenCalledWith('/auth/reset-password', {
+      token: 'token',
+      password: 'copper-lantern-meadow-58',
+    });
+    expect(useAuthStore.getState().authUser).toEqual(user);
+    expect(toast.success).toHaveBeenCalledWith('Password updated. Welcome back!');
+    await vi.waitFor(() => expect(io).toHaveBeenCalled());
+  });
+
+  it('a used or expired link changes nothing and stays quiet', async () => {
+    useAuthStore.setState({ authUser: user, isCheckingAuth: false });
+    vi.mocked(apiService.post).mockRejectedValueOnce({ status: 400, code: 'RESET_INVALID', message: 'x' });
+
+    expect(await useAuthStore.getState().resetPassword('used', 'copper-lantern-meadow-58')).toEqual({ kind: 'invalid' });
+    expect(useAuthStore.getState().authUser).toEqual(user);
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("passes on the server's reason for refusing the password", async () => {
+    vi.mocked(apiService.post).mockRejectedValueOnce({
+      status: 400,
+      code: 'PASSWORD_BREACHED',
+      message: 'This password has appeared in a data breach',
+    });
+
+    expect(await useAuthStore.getState().resetPassword('token', 'password1234')).toEqual({
+      kind: 'refused',
+      message: 'This password has appeared in a data breach',
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('reports anything else as an error', async () => {
+    vi.mocked(apiService.post).mockRejectedValueOnce({ status: 500, message: 'Internal server error' });
+
+    expect(await useAuthStore.getState().resetPassword('token', 'copper-lantern-meadow-58')).toBeNull();
+    expect(useAuthStore.getState().authUser).toBeNull();
+    expect(toast.error).toHaveBeenCalled();
+  });
+});

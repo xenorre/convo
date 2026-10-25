@@ -9,9 +9,8 @@ import PasswordVisibilityToggle from "@/components/forms/PasswordVisibilityToggl
 import {
   PASSWORD_MAX_LENGTH,
   isPasswordPolicyCode,
-  loadStrengthChecker,
   passwordProblem,
-  personalWords,
+  strengthScore,
   type PasswordAccount,
 } from "@/utils/passwordPolicy";
 import {
@@ -45,15 +44,6 @@ function validatePasswordForm(
   if (!errors.next && confirm !== next) errors.confirm = "Passwords don't match.";
   return errors;
 }
-
-const strengthOf = async (password: string, account: PasswordAccount) => {
-  try {
-    const check = await loadStrengthChecker();
-    return check(password, personalWords(account)).score;
-  } catch {
-    return undefined;
-  }
-};
 
 interface PasswordFieldProps {
   id: string;
@@ -127,7 +117,7 @@ function PasswordCard() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const problems = validatePasswordForm(form, account, await strengthOf(form.next, account));
+    const problems = validatePasswordForm(form, account, await strengthScore(form.next, account));
     setErrors(problems);
     if (Object.keys(problems).length > 0) return;
 

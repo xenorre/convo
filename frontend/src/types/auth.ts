@@ -30,6 +30,12 @@ export type SignUpOutcome =
   | { kind: "refused"; code: string; message: string }
   | null;
 
+export type ResetPasswordOutcome =
+  | { kind: "done" }
+  | { kind: "refused"; message: string }
+  | { kind: "invalid" }
+  | null;
+
 export interface AuthState {
   authUser: AuthUser | null;
   isCheckingAuth: boolean;
@@ -49,6 +55,11 @@ export interface AuthState {
   // Confirms the email from the emailed link and signs in; false if the
   // link is invalid, used or expired.
   verifyEmail: (token: string) => Promise<boolean>;
+  // Sets a new password from the emailed link and signs in.
+  // "done": signed in. "refused": the server's reason, for the password field.
+  // "invalid": the link is unknown, used or expired.
+  // null: something else failed, already reported as a toast.
+  resetPassword: (token: string, password: string) => Promise<ResetPasswordOutcome>;
   logout: () => Promise<void>;
   // Applies a profile change returned by the server to the signed-in user.
   updateAuthUser: (user: AuthUser) => void;

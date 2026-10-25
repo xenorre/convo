@@ -107,8 +107,16 @@ const linkFallback = (link) => `
   </tr>
 </table>`;
 
-const reasonFor = (email) =>
-  `This email was sent to ${escapeHtml(email)} because it was used to sign up for Convo.`;
+const reasonFor = (email, why = "it was used to sign up for Convo") =>
+  `This email was sent to ${escapeHtml(email)} because ${why}.`;
+
+const ACCOUNT_REASON = "it belongs to a Convo account";
+
+// "1 hour", "24 hours", "30 minutes".
+const duration = (minutes) => {
+  const [value, unit] = minutes % 60 === 0 ? [minutes / 60, "hour"] : [minutes, "minute"];
+  return `${value} ${unit}${value === 1 ? "" : "s"}`;
+};
 
 export function createVerificationEmail({ name, email, link, expiresInHours }) {
   const hi = escapeHtml(firstName(name));
@@ -188,6 +196,78 @@ export function createWelcomeEmail({ name, email, appUrl }) {
     ...STEPS.map(([title, detail], index) => `${index + 1}. ${title} ${detail}`),
     "",
     `Open Convo: ${appUrl}`,
+    "",
+    "— Convo",
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
+export function createPasswordResetEmail({ name, email, link, expiresInMinutes }) {
+  const hi = escapeHtml(firstName(name));
+  const expiry = duration(expiresInMinutes);
+  const subject = "Reset your Convo password";
+
+  const html = layout({
+    title: subject,
+    preview: `Choose a new password for your Convo account. The link expires in ${expiry}.`,
+    reason: reasonFor(email, ACCOUNT_REASON),
+    content: `
+      ${heading("Reset your password")}
+      ${paragraph(`Hi ${hi},`)}
+      ${paragraph(`Someone asked to reset the password for <strong style="color:${TEXT};">${escapeHtml(email)}</strong>. If it was you, choose a new password and you'll be signed in straight away.`, { margin: "0 0 28px" })}
+      ${button(link, "Choose a new password")}
+      ${paragraph(`The link expires in ${expiry} and works once.`, { size: 14, color: MUTED, margin: "20px 0 0", align: "center" })}
+      ${paragraph("Didn't ask for this? You can safely ignore this email. Your password won't change unless this link is used.", { size: 14, color: MUTED, margin: "20px 0 0" })}
+      ${linkFallback(link)}`,
+  });
+
+  const text = [
+    `Hi ${firstName(name)},`,
+    "",
+    `Someone asked to reset the password for ${email}. If it was you, choose a new password here:`,
+    "",
+    link,
+    "",
+    `The link expires in ${expiry} and works once.`,
+    "",
+    "Didn't ask for this? You can safely ignore this email. Your password won't change unless this link is used.",
+    "",
+    "— Convo",
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
+const changeTime = (date) =>
+  `${new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: "UTC" }).format(date)} UTC`;
+
+// A notice only, with nothing to click: a real one can't be told apart from
+// a phishing copy by its button, so it sends people to the app themselves.
+export function createPasswordChangedEmail({ name, email, changedAt }) {
+  const hi = escapeHtml(firstName(name));
+  const when = changeTime(changedAt);
+  const subject = "Your Convo password was changed";
+  const notYou =
+    "If you didn't do this, open Convo yourself, choose \"Forgot password?\" on the sign-in page and reset it straight away. Every other device was already signed out.";
+
+  const html = layout({
+    title: subject,
+    preview: `The password for your Convo account was changed on ${when}.`,
+    reason: reasonFor(email, ACCOUNT_REASON),
+    content: `
+      ${heading("Your password was changed")}
+      ${paragraph(`Hi ${hi},`)}
+      ${paragraph(`The password for <strong style="color:${TEXT};">${escapeHtml(email)}</strong> was changed on ${escapeHtml(when)}. If that was you, there's nothing else to do.`)}
+      ${paragraph(escapeHtml(notYou), { margin: "0" })}`,
+  });
+
+  const text = [
+    `Hi ${firstName(name)},`,
+    "",
+    `The password for ${email} was changed on ${when}. If that was you, there's nothing else to do.`,
+    "",
+    notYou,
     "",
     "— Convo",
   ].join("\n");

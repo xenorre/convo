@@ -166,6 +166,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  resetPassword: async (token, password) => {
+    if (pendingLogout) await pendingLogout;
+    const requestVersion = getAuthSessionVersion();
+    try {
+      const response = await apiService.post<AuthResponse>('/auth/reset-password', { token, password });
+      if (!isCurrentAuthSession(requestVersion)) return null;
+      // The server has moved this browser to the account's new session.
+      advanceAuthSession();
+      get().disconnectSocket();
+      set({ authUser: response.user || response, isCheckingAuth: false });
+      toast.success('Password updated. Welcome back!');
+      get().connectSocket();
+      return { kind: 'done' };
+    } catch (e: unknown) {
+      if (!isCurrentAuthSession(requestVersion)) return null;
+      const apiError = createApiError(e);
+      if (apiError.code === 'RESET_INVALID') return { kind: 'invalid' };
+      // Any other 400 is about the new password, e.g. found in a data breach.
+      if (apiError.status === 400) return { kind: 'refused', message: apiError.message };
+      handleStoreError(e, "Couldn't reset your password");
+      return null;
+    }
+  },
+
   logout: () => {
     if (pendingLogout) return pendingLogout;
     // Detach the current client before the server notifies other tabs of logout.

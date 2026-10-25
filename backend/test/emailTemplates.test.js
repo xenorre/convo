@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createVerificationEmail, createWelcomeEmail, firstName } from "../src/utils/emailTemplates.js";
+import {
+  createPasswordChangedEmail,
+  createPasswordResetEmail,
+  createVerificationEmail,
+  createWelcomeEmail,
+  firstName,
+} from "../src/utils/emailTemplates.js";
 
 const verification = (overrides = {}) =>
   createVerificationEmail({
@@ -8,6 +14,23 @@ const verification = (overrides = {}) =>
     email: "ann@example.com",
     link: "https://convo.test/verify-email?token=x&y",
     expiresInHours: 24,
+    ...overrides,
+  });
+
+const passwordReset = (overrides = {}) =>
+  createPasswordResetEmail({
+    name: "Ann Smith",
+    email: "ann@example.com",
+    link: "https://convo.test/reset-password?token=x&y",
+    expiresInMinutes: 60,
+    ...overrides,
+  });
+
+const passwordChanged = (overrides = {}) =>
+  createPasswordChangedEmail({
+    name: "Ann Smith",
+    email: "ann@example.com",
+    changedAt: new Date("2026-10-25T14:03:00Z"),
     ...overrides,
   });
 
@@ -30,12 +53,15 @@ test("anything a user typed is escaped in the HTML", () => {
   assert.ok(!html.includes("<img"));
   assert.ok(html.includes("&lt;img"));
   assert.ok(!html.includes("a<b>@"));
-  const { html: welcomeHtml } = welcome({ name: "<script>x</script>" });
-  assert.ok(!welcomeHtml.includes("<script>"));
+  for (const email of [welcome, passwordReset, passwordChanged]) {
+    const { html } = email({ name: "<script>x</script>", email: "a<b>@example.com" });
+    assert.ok(!html.includes("<script>"));
+    assert.ok(!html.includes("a<b>@"));
+  }
 });
 
-test("both emails say who they were sent to, with no placeholders or dead links left", () => {
-  for (const { html, text } of [verification(), welcome()]) {
+test("every email says who it was sent to, with no placeholders or dead links left", () => {
+  for (const { html, text } of [verification(), welcome(), passwordReset(), passwordChanged()]) {
     assert.match(html, /sent to ann@example\.com/);
     assert.ok(!/\{\{|\}\}/.test(html), "no template placeholders");
     assert.ok(!html.includes('href="#"'), "no dead links");
@@ -57,4 +83,21 @@ test("a blank name still reads naturally", () => {
   assert.equal(firstName("  Ann   Smith "), "Ann");
   assert.equal(firstName(""), "there");
   assert.equal(firstName(undefined), "there");
+});
+
+test("the reset email links to the reset page and says how long it works", () => {
+  const { subject, html, text } = passwordReset();
+  assert.equal(subject, "Reset your Convo password");
+  assert.equal(html.split('href="https://convo.test/reset-password?token=x&amp;y"').length - 1, 2);
+  assert.match(html, /expires in 1 hour/);
+  assert.ok(text.includes("https://convo.test/reset-password?token=x&y"));
+  assert.match(passwordReset({ expiresInMinutes: 30 }).text, /expires in 30 minutes/);
+});
+
+test("the password-changed notice says when, and has nothing to click", () => {
+  const { subject, html, text } = passwordChanged();
+  assert.equal(subject, "Your Convo password was changed");
+  assert.match(text, /25 October 2026 at 14:03 UTC/);
+  assert.match(text, /Forgot password\?/);
+  assert.ok(!/href=/.test(html));
 });

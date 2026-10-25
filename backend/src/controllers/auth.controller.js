@@ -1,6 +1,9 @@
 import {
   changePasswordSchema,
+  forgotPasswordSchema,
   resendVerificationSchema,
+  resetPasswordSchema,
+  resetTokenSchema,
   signInSchema,
   signUpSchema,
   verifyEmailSchema,
@@ -10,6 +13,13 @@ import {
   issueVerification,
   resendVerification,
 } from "#services/emailVerification.service.js";
+import {
+  cancelPasswordReset,
+  completePasswordReset,
+  findResetAccount,
+  requestPasswordReset,
+  sendPasswordChangedEmail,
+} from "#services/passwordReset.service.js";
 import { formatValidationError } from "#utils/format.js";
 import { PASSWORD_POLICY_MESSAGES, passwordPolicyError } from "#services/password.service.js";
 import {
@@ -52,6 +62,36 @@ const rejectPassword = (req, res, code, field) =>
     field,
     requestId: req.requestId,
   });
+
+// Signed out because the password changed elsewhere: the reset link or the
+// form in Settings.
+const PASSWORD_CHANGED = Object.freeze({
+  code: "SESSION_REVOKED",
+  message: "You have been signed out because your password was changed.",
+});
+
+// After the response: older reset links stop working and the owner hears
+// about the change, in case it wasn't them.
+const afterPasswordChange = (req, user, { cancelReset = true } = {}) => {
+  const userId = user.id ?? user._id;
+  const tasks = [sendPasswordChangedEmail(user)];
+  if (cancelReset) tasks.unshift(cancelPasswordReset(userId));
+  Promise.allSettled(tasks).then((results) => {
+    for (const result of results) {
+      if (result.status === "rejected") {
+        logger.error("Error after a password change", {
+          requestId: req.requestId,
+          error: result.reason?.message,
+        });
+      }
+    }
+  });
+};
+
+const RESET_INVALID = Object.freeze({
+  error: "This link is invalid or has expired",
+  code: "RESET_INVALID",
+});
 
 export const signUp = async (req, res, next) => {
   try {
@@ -202,6 +242,7 @@ export const changePassword = async (req, res) => {
       message: "Password changed successfully",
       requestId: req.requestId,
     });
+    afterPasswordChange(req, req.user);
   } catch (e) {
     // 400, not 401: the client treats every 401 as a signed-out session.
     if (e.message === PASSWORD_ERRORS.INVALID_CURRENT) {
@@ -274,6 +315,81 @@ export const verifyEmail = async (req, res) => {
 
 // Always the same answer, whether or not a link was sent, so it can't be
 // used to find out which emails have accounts.
+export const forgotPassword = async (req, res) => {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Enter a valid email address", requestId: req.requestId });
+  }
+
+  try {
+    await requestPasswordReset(parsed.data.email);
+  } catch (e) {
+    logger.error("Error sending password reset email", { requestId: req.requestId, error: e.message });
+  }
+  res.status(200).json({
+    message: "If an account uses that email, a link to reset its password is on its way.",
+    requestId: req.requestId,
+  });
+};
+
+// Opening the link: says whose password it resets, or that it no longer
+// works, before anyone types a new one. Does not use the link up.
+export const checkPasswordReset = async (req, res) => {
+  const parsed = resetTokenSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ ...RESET_INVALID, requestId: req.requestId });
+
+  try {
+    const account = await findResetAccount(parsed.data.token);
+    if (!account) return res.status(400).json({ ...RESET_INVALID, requestId: req.requestId });
+    res.status(200).json({ email: account.email, fullName: account.fullName, requestId: req.requestId });
+  } catch (e) {
+    logger.error("Error checking password reset link", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
+// Sets the new password from the emailed link and signs in, like a login.
+// Every other session of the account is signed out.
+export const resetPassword = async (req, res) => {
+  if (!resetTokenSchema.safeParse({ token: req.body?.token }).success) {
+    return res.status(400).json({ ...RESET_INVALID, requestId: req.requestId });
+  }
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: formatValidationError(parsed.error),
+      field: "password",
+      requestId: req.requestId,
+    });
+  }
+
+  const { token, password } = parsed.data;
+  try {
+    const account = await findResetAccount(token);
+    if (!account) return res.status(400).json({ ...RESET_INVALID, requestId: req.requestId });
+
+    // A refused password leaves the link usable for another try.
+    const policyError = await passwordPolicyError(password, account);
+    if (policyError) return rejectPassword(req, res, policyError, "password");
+
+    const sessionId = createSessionId();
+    const previous = await completePasswordReset(token, password, sessionId);
+    if (!previous) return res.status(400).json({ ...RESET_INVALID, requestId: req.requestId });
+
+    const userId = String(previous._id);
+    revokeSessionSockets(io, userId, previous.activeSessionId, PASSWORD_CHANGED);
+    cookies.set(res, "token", jwttoken.sign({ id: userId, sid: sessionId }));
+
+    const user = { _id: userId, email: previous.email, fullName: previous.fullName, profilePic: previous.profilePic };
+    res.status(200).json({ message: "Password reset", user, requestId: req.requestId });
+    // The link was already used up, so there is no reset left to cancel.
+    afterPasswordChange(req, user, { cancelReset: false });
+  } catch (e) {
+    logger.error("Error resetting password", { requestId: req.requestId, error: e.message });
+    res.status(500).json({ error: "Internal server error", requestId: req.requestId });
+  }
+};
+
 export const resendVerificationEmail = async (req, res) => {
   const parsed = resendVerificationSchema.safeParse(req.body);
   if (!parsed.success) {

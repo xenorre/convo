@@ -6,12 +6,7 @@ import { validateEmail, sanitizeInput } from "@/utils/sanitize";
 import toast from "react-hot-toast";
 import PasswordStrengthMeter from "@/components/PasswordStrengthMeter";
 import PasswordVisibilityToggle from "./PasswordVisibilityToggle";
-import {
-  PASSWORD_MAX_LENGTH,
-  loadStrengthChecker,
-  passwordProblem,
-  personalWords,
-} from "@/utils/passwordPolicy";
+import { PASSWORD_MAX_LENGTH, passwordProblem, strengthScore } from "@/utils/passwordPolicy";
 
 // Same limits as the server and as changing the name in Settings.
 const NAME_MAX_LENGTH = 50;
@@ -31,16 +26,6 @@ function SignUpForm() {
   const { signUp, isSigningUp } = useAuthStore();
   const navigate = useNavigate();
   const account = { fullName: formData.fullName, email: formData.email };
-
-  // Strength needs the checker; if it can't load, the server still decides.
-  const strengthOf = async (password: string) => {
-    try {
-      const check = await loadStrengthChecker();
-      return check(password, personalWords(account)).score;
-    } catch {
-      return undefined;
-    }
-  };
 
   const validateForm = async () => {
     const newErrors: { fullName?: string; email?: string; password?: string } =
@@ -63,7 +48,7 @@ function SignUpForm() {
     if (!formData.password) {
       newErrors.password = "Password is required";
     } else {
-      const problem = passwordProblem(formData.password, account, await strengthOf(formData.password));
+      const problem = passwordProblem(formData.password, account, await strengthScore(formData.password, account));
       if (problem) newErrors.password = problem;
     }
 

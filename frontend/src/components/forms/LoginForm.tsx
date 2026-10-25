@@ -105,9 +105,19 @@ function LoginForm() {
         </div>
 
         <div>
-          <label htmlFor="login-password" className="auth-input-label">
-            Password
-          </label>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <label htmlFor="login-password" className="auth-input-label mb-0">
+              Password
+            </label>
+            {/* A full 44px touch target that doesn't push the field down. */}
+            <Link
+              to="/forgot-password"
+              state={{ email: formData.email.trim() }}
+              className="-my-3 inline-flex min-h-11 items-center rounded-lg px-1 text-sm text-cyan-400 transition-colors hover:text-cyan-300"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <div className="relative">
             <LockIcon className="auth-input-icon" aria-hidden="true" />
             <input

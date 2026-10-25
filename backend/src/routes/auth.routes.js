@@ -6,6 +6,9 @@ import {
   changePassword,
   verifyEmail,
   resendVerificationEmail,
+  forgotPassword,
+  checkPasswordReset,
+  resetPassword,
 } from "#controllers/auth.controller.js";
 import { protectRoute } from "#src/middleware/auth.middleware.js";
 import { rateLimitPerUser } from "#src/middleware/rateLimit.middleware.js";
@@ -21,6 +24,21 @@ router.post(
   "/resend-verification",
   rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 5 }),
   resendVerificationEmail
+);
+router.post(
+  "/forgot-password",
+  rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 5 }),
+  forgotPassword
+);
+router.post(
+  "/reset-password/check",
+  rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 30 }),
+  checkPasswordReset
+);
+router.post(
+  "/reset-password",
+  rateLimitPerUser({ windowMs: 15 * 60 * 1000, max: 30 }),
+  resetPassword
 );
 // Limits guessing the current password from a signed-in session.
 router.put(

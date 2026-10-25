@@ -13,6 +13,8 @@ const ChatPage = lazy(() => import("@/pages/ChatPage"));
 const SignUp = lazy(() => import("@/pages/SignUp"));
 const CheckEmail = lazy(() => import("@/pages/CheckEmail"));
 const VerifyEmail = lazy(() => import("@/pages/VerifyEmail"));
+const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
 const ProfileSettings = lazy(() => import("@/pages/settings/ProfileSettings"));
 const AccountSettings = lazy(() => import("@/pages/settings/AccountSettings"));
@@ -74,12 +76,30 @@ function App() {
                 </PublicRoute>
               }
             />
-            {/* Not a PublicRoute: the link signs in even if someone else was. */}
+            <Route
+              path="/forgot-password"
+              element={
+                <PublicRoute>
+                  <Suspense fallback={<PageLoader />}>
+                    <ForgotPassword />
+                  </Suspense>
+                </PublicRoute>
+              }
+            />
+            {/* Not PublicRoutes: these links sign in even if someone else was. */}
             <Route
               path="/verify-email"
               element={
                 <Suspense fallback={<PageLoader />}>
                   <VerifyEmail />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/reset-password"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <ResetPassword />
                 </Suspense>
               }
             />

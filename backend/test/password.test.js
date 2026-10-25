@@ -11,6 +11,8 @@ process.env.RESEND_API_KEY = "";
 process.env.LOG_TO_FILES = "false";
 
 const { default: User } = await import("../src/models/user.model.js");
+const { default: PasswordReset } = await import("../src/models/passwordReset.model.js");
+const { resendClient } = await import("../src/config/resend.js");
 const { default: logger } = await import("../src/config/logger.js");
 const { jwttoken } = await import("../src/utils/jwt.js");
 const { changePassword } = await import("../src/controllers/auth.controller.js");
@@ -19,8 +21,19 @@ const { io } = await import("../src/config/socket.js");
 const { default: bcrypt } = await import("bcrypt");
 
 logger.silent = true;
-// The breached-password check must never reach the real service from tests.
-beforeEach(() => mock.method(globalThis, "fetch", async () => new Response("", { status: 200 })));
+// The breached-password check must never reach the real service from tests,
+// and what follows a change (reset links, the notice email) stays stubbed.
+let sent;
+let cancelledResets;
+beforeEach(() => {
+  mock.method(globalThis, "fetch", async () => new Response("", { status: 200 }));
+  sent = [];
+  mock.method(resendClient.emails, "send", async (payload) => {
+    sent.push(payload);
+    return { data: { id: "email" }, error: null };
+  });
+  cancelledResets = mock.method(PasswordReset, "deleteOne", async () => ({ deletedCount: 1 }));
+});
 afterEach(() => mock.restoreAll());
 after(() => io.close());
 
@@ -145,4 +158,24 @@ test("a new password is held to the password policy before anything is changed",
   assert.equal(res.body.code, "PASSWORD_PERSONAL");
   assert.equal(res.body.field, "newPassword");
   assert.equal(updateOne.mock.callCount(), 0);
+});
+
+test("a password change cancels pending reset links and tells the owner by email", async () => {
+  stubAccount();
+  const res = response();
+  await changePassword({
+    user: { id: userId, fullName: "Ann Smith", email: "ann@example.com" },
+    sessionId: currentSid,
+    body: { currentPassword: "old-password", newPassword: "violet-anchor-harbor-71" },
+    requestId: "req",
+  }, res);
+  // The follow-up runs after the response.
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(cancelledResets.mock.calls[0].arguments, [{ userId }]);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, "ann@example.com");
+  assert.match(sent[0].subject, /password was changed/);
+  assert.ok(!/href=/.test(sent[0].html), "the notice has nothing to click");
 });
