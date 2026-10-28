@@ -12,11 +12,16 @@ export function usePasswordStrength(password: string, { fullName, email }: Passw
   const [failed, setFailed] = useState(false);
   const userInputs = useMemo(() => personalWords({ fullName, email }), [fullName, email]);
 
+  // A cleared field forgets the old score, so it doesn't flash back when
+  // typing starts again (adjusted during render, as React recommends).
+  const [scoredPassword, setScoredPassword] = useState(password);
+  if (password !== scoredPassword) {
+    setScoredPassword(password);
+    if (!password) setResult(null);
+  }
+
   useEffect(() => {
-    if (!password) {
-      setResult(null);
-      return;
-    }
+    if (!password) return;
     let isCurrent = true;
     const timer = setTimeout(() => {
       loadStrengthChecker()

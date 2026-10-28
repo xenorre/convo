@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { useSettingsStore, type MotionPreference } from "@/store/useSettingsStore";
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
@@ -11,23 +11,15 @@ const systemMotionQuery = () =>
 export const resolveReducedMotion = (preference: MotionPreference, systemPrefersReduced: boolean) =>
   preference === "system" ? systemPrefersReduced : preference === "reduce";
 
-const useSystemReducedMotion = (): boolean => {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
-    () => systemMotionQuery()?.matches ?? false,
-  );
-
-  useEffect(() => {
-    const mediaQuery = systemMotionQuery();
-    if (!mediaQuery) return;
-
-    setPrefersReducedMotion(mediaQuery.matches);
-    const handleChange = (e: MediaQueryListEvent) => setPrefersReducedMotion(e.matches);
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
-  return prefersReducedMotion;
+const subscribeToSystemMotion = (onChange: () => void) => {
+  const mediaQuery = systemMotionQuery();
+  mediaQuery?.addEventListener("change", onChange);
+  return () => mediaQuery?.removeEventListener("change", onChange);
 };
+
+// The operating system's setting, read straight from the media query.
+const useSystemReducedMotion = (): boolean =>
+  useSyncExternalStore(subscribeToSystemMotion, () => systemMotionQuery()?.matches ?? false, () => false);
 
 // The device setting wins; "system" follows the operating system.
 export const useReducedMotion = (): boolean => {

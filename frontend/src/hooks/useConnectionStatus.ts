@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
+import type { AppSocket } from '@/types/socket';
 
 export interface ConnectionStatus {
   isConnected: boolean;
@@ -7,35 +8,43 @@ export interface ConnectionStatus {
   connectionError: string | null;
 }
 
+const NO_SOCKET: ConnectionStatus = {
+  isConnected: false,
+  isReconnecting: false,
+  connectionError: null,
+};
+
+// How a socket stands before any of its events arrive.
+const initialStatus = (socket: AppSocket): ConnectionStatus => ({
+  isConnected: socket.connected,
+  isReconnecting: false,
+  connectionError: null,
+});
+
 export const useConnectionStatus = () => {
-  const [status, setStatus] = useState<ConnectionStatus>({
-    isConnected: false,
-    isReconnecting: false,
-    connectionError: null,
+  const { socket } = useAuthStore();
+  // Kept together with the socket it describes, so a new socket starts from
+  // its own state instead of the previous one's.
+  const [tracked, setTracked] = useState<{ socket: AppSocket | null; status: ConnectionStatus }>({
+    socket: null,
+    status: NO_SOCKET,
   });
 
-  const { socket } = useAuthStore();
-
   useEffect(() => {
-    if (!socket) {
-      setStatus({
-        isConnected: false,
-        isReconnecting: false,
-        connectionError: null,
-      });
-      return;
-    }
+    if (!socket) return;
+    const update = (change: (status: ConnectionStatus) => ConnectionStatus) =>
+      setTracked((prev) => ({ socket, status: change(prev.socket === socket ? prev.status : initialStatus(socket)) }));
 
     const handleConnect = () => {
-      setStatus({
+      update(() => ({
         isConnected: true,
         isReconnecting: false,
         connectionError: null,
-      });
+      }));
     };
 
     const handleDisconnect = () => {
-      setStatus(prev => ({
+      update(prev => ({
         ...prev,
         isConnected: false,
         connectionError: 'Connection lost',
@@ -45,7 +54,7 @@ export const useConnectionStatus = () => {
     // Reconnection is run by the socket's Manager (`socket.io`), which is
     // where its events fire; the socket itself never emits them.
     const handleReconnecting = () => {
-      setStatus(prev => ({
+      update(prev => ({
         ...prev,
         isReconnecting: true,
         connectionError: null,
@@ -53,7 +62,7 @@ export const useConnectionStatus = () => {
     };
 
     const handleReconnectFailed = () => {
-      setStatus(prev => ({
+      update(prev => ({
         ...prev,
         isReconnecting: false,
         connectionError: 'Failed to reconnect',
@@ -61,18 +70,11 @@ export const useConnectionStatus = () => {
     };
 
     const handleError = (error: Error) => {
-      setStatus(prev => ({
+      update(prev => ({
         ...prev,
         connectionError: error.message,
       }));
     };
-
-    // Set initial connection status
-    setStatus({
-      isConnected: socket.connected,
-      isReconnecting: false,
-      connectionError: null,
-    });
 
     // Listen to socket events
     socket.on('connect', handleConnect);
@@ -90,5 +92,6 @@ export const useConnectionStatus = () => {
     };
   }, [socket]);
 
-  return status;
+  if (!socket) return NO_SOCKET;
+  return tracked.socket === socket ? tracked.status : initialStatus(socket);
 };

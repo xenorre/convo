@@ -112,28 +112,35 @@ function ResultRow({ user }: { user: UserSearchResult }) {
 
 function AddFriendPanel({ onBack }: { onBack: () => void }) {
   const [query, setQuery] = useState("");
-  const [search, setSearch] = useState<SearchState>({ status: "idle" });
   const debounced = useDebounce(query.trim(), DEBOUNCE_MS);
+  // The server's answer and the query it answers; until the current query
+  // has one, it is loading.
+  const [answer, setAnswer] = useState<{ query: string; state: SearchState } | null>(null);
+  const search: SearchState =
+    debounced.length < MIN_QUERY_LENGTH
+      ? { status: "idle" }
+      : answer?.query === debounced
+        ? answer.state
+        : { status: "loading" };
 
   useEffect(() => {
-    if (debounced.length < MIN_QUERY_LENGTH) {
-      setSearch({ status: "idle" });
-      return;
-    }
+    if (debounced.length < MIN_QUERY_LENGTH) return;
     // Answers to an older query must not replace newer results.
     let isCurrent = true;
-    setSearch({ status: "loading" });
     apiService
       .get<UserSearchResponse>("/users/search", { params: { q: debounced } })
       .then(({ users }) => {
-        if (isCurrent) setSearch({ status: "done", users });
+        if (isCurrent) setAnswer({ query: debounced, state: { status: "done", users } });
       })
       .catch((error) => {
         if (!isCurrent) return;
         const apiError = createApiError(error);
-        setSearch({
-          status: "error",
-          message: apiError.status === 429 ? apiError.message : "Search isn't available right now. Try again later.",
+        setAnswer({
+          query: debounced,
+          state: {
+            status: "error",
+            message: apiError.status === 429 ? apiError.message : "Search isn't available right now. Try again later.",
+          },
         });
       });
     return () => {

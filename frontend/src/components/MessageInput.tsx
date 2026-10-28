@@ -18,8 +18,11 @@ function MessageInput() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const typing = useTypingSignal(userId);
+  // The latest text for the cleanup below, which outlives this render.
   const textRef = useRef(text);
-  textRef.current = text;
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
 
   // Saved when leaving the conversation rather than on every keystroke, and
   // never into the next account's session after a logout.
