@@ -1,6 +1,6 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { visualizer } from "rollup-plugin-visualizer";
 import path from "path";
@@ -26,11 +26,11 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@/components": path.resolve(__dirname, "./src/components"),
-      "@/pages": path.resolve(__dirname, "./src/pages"),
-      "@/store": path.resolve(__dirname, "./src/store"),
-      "@/config": path.resolve(__dirname, "./src/config"),
+      "@": path.resolve(import.meta.dirname, "./src"),
+      "@/components": path.resolve(import.meta.dirname, "./src/components"),
+      "@/pages": path.resolve(import.meta.dirname, "./src/pages"),
+      "@/store": path.resolve(import.meta.dirname, "./src/store"),
+      "@/config": path.resolve(import.meta.dirname, "./src/config"),
     },
   },
   test: {
