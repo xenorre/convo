@@ -69,18 +69,6 @@ docker compose -f docker-compose.fullstack.yml up -d --build
 # Open http://localhost:8080
 ```
 
-### D) Kubernetes (example manifests)
-
-```bash
-# Ensure images are built/pushed to a registry reachable by your cluster
-# Then apply manifests
-kubectl apply -f deploy/k8s
-# Set your real domain and TLS secret in deploy/k8s/ingress.yaml
-```
-
-- Frontend pods serve the SPA via Nginx and proxy to backend Service for /api and /socket.io (WebSockets enabled).
-- Backend has liveness (/healthz) and readiness (/readyz) probes.
-
 ## Environment
 
 Backend (validated at startup):
@@ -118,8 +106,7 @@ Frontend (Vite variables):
 - Makefile (shortcuts)
   - `make dev` — dev stack (compose)
   - `make build-fullstack` / `make up-fullstack` / `make down-fullstack`
-  - `make prod-up` / `make prod-down`
-  - `make k8s-apply` / `make k8s-delete`
+  - `make deploy` — production deploy (see [DEPLOYMENT.md](DEPLOYMENT.md))
 
 ## Versions and releases
 
@@ -211,9 +198,10 @@ You can wire application metrics later (e.g., prom-client) and add scrape config
 convo/
 ├── backend/       # Node/Express API + Socket.IO
 ├── frontend/      # React + Vite + TypeScript SPA
-├── deploy/k8s/    # Example Kubernetes manifests
 ├── monitoring/    # Optional Prometheus/Grafana/Loki stack
-├── docker-compose.*.yml
+├── docker-compose.*.yml   # dev, fullstack, monitoring; production in docker-compose.prod.yaml
+├── deploy.sh             # production deploy (DEPLOYMENT.md)
+├── scripts/              # server-side scripts (backups)
 ├── Makefile
 └── WARP.md
 ```

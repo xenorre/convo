@@ -219,34 +219,8 @@ docker-compose -f docker-compose.prod.yml up -d
 
 ## 🚀 Deployment
 
-### Quick Deploy Options
-
-```bash
-# Development
-./scripts/deploy.sh development
-
-# Staging
-./scripts/deploy.sh staging
-
-# Production (with safety checks)
-./scripts/production-deploy.sh
-```
-
-### Using Make Commands
-
-```bash
-make deploy-dev        # Development
-make deploy-staging    # Staging  
-make deploy-prod       # Production
-```
-
-### Kubernetes
-
-```bash
-# Deploy to Kubernetes
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/deployment.yaml
-```
+The frontend is built into the single production image and served by the
+backend; see [DEPLOYMENT.md](../DEPLOYMENT.md) in the repository root.
 
 ## 📁 Project Structure
 

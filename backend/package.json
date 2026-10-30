@@ -22,14 +22,10 @@
     "clean": "rm -rf node_modules package-lock.json",
     "scripts:dev": "./scripts/dev.sh",
     "scripts:test": "./scripts/test.sh",
-    "scripts:deploy": "./scripts/deploy.sh",
     "scripts:quickstart": "./scripts/quickstart.sh",
     "fullstack:up": "docker-compose -f docker-compose.fullstack.yml up -d",
     "fullstack:down": "docker-compose -f docker-compose.fullstack.yml down",
-    "fullstack:logs": "docker-compose -f docker-compose.fullstack.yml logs -f",
-    "production:up": "docker-compose -f docker-compose.production.yml up -d",
-    "production:down": "docker-compose -f docker-compose.production.yml down",
-    "production:logs": "docker-compose -f docker-compose.production.yml logs -f"
+    "fullstack:logs": "docker-compose -f docker-compose.fullstack.yml logs -f"
   },
   "imports": {
     "#src/*": "./src/*",

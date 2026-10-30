@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1
 
 # --- Build frontend ---
-FROM node:24 AS frontend-build
+# The built files are the same on every platform, so this stage runs natively
+# on the build machine instead of under emulation (deploy.sh builds amd64 on
+# an Apple Silicon Mac).
+FROM --platform=$BUILDPLATFORM node:24 AS frontend-build
 WORKDIR /app/frontend
 
 # Provide production-friendly defaults for Vite at build time

@@ -33,6 +33,47 @@ over.
   under `/uploads`, at most 2 MB each.
 - There is no Redis: one app instance needs none.
 
+## Deploying
+
+From a clean, committed working tree on the Mac:
+
+```bash
+./deploy.sh        # or: make deploy
+```
+
+It needs to know the server, which this public repository doesn't: put
+`VPS_HOST`, `VPS_USER` (and `VPS_PORT` if not 22) in a `.deploy.env` next to
+the script (gitignored) or in the environment. SSH must work with a key.
+
+What it does:
+
+1. Refuses uncommitted changes, since the image records the commit.
+2. Runs the backend tests, the frontend lint and tests, and `npm audit` of the
+   production dependencies (`SKIP_CHECKS=1` skips this for a redeploy).
+3. Checks the server: Docker, Compose, Traefik's `apexcore-network`,
+   `~/apps/convo/.env`, and that no other project owns the container names.
+4. Builds `convo:<version>-<commit>` for linux/amd64 and copies it, the
+   Compose file and the backup script to `~/apps/convo` over SSH.
+5. Starts it with `docker compose up --wait` and checks that `/healthz`
+   reports the commit just built. If the new version doesn't come up healthy,
+   it goes back to the previous image and Compose file by itself and fails.
+6. Keeps the three newest images and checks https://convo.deezby.pl/healthz.
+
+MongoDB is only recreated when its own settings in the Compose file change.
+
+### Going back by hand
+
+On the server, in `~/apps/convo`:
+
+```bash
+docker image ls convo                     # convo:<version>-<commit>, newest first
+docker tag convo:<version>-<commit> convo:latest
+docker compose -p convo-prod -f docker-compose.prod.yaml up -d --force-recreate --no-deps --wait app
+```
+
+Data and files stay as they are; a version going back doesn't undo database
+changes the newer one made.
+
 ## Secrets
 
 Make every secret with `openssl rand -hex 32` and keep passwords hex: they go

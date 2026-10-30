@@ -242,7 +242,7 @@ Docker & Compose
 - Dockerfile — multi-stage image; production runner with tini + healthcheck
 - docker-compose.yml — dev stack (backend + Mongo + Redis)
 - docker-compose.fullstack.yml — adds frontend and admin UIs (mongo-express, redis-commander)
-- docker-compose.production.yml — production-optimized with nginx, monitoring (profiles)
+- Production runs from the root image and docker-compose.prod.yaml; see ../DEPLOYMENT.md
 
 Common Compose commands
 
@@ -256,9 +256,6 @@ docker-compose down
 
 # Fullstack
 docker-compose -f docker-compose.fullstack.yml up -d
-
-# Production (core services)
-docker-compose -f docker-compose.production.yml up -d
 ```
 
 CI
