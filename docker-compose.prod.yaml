@@ -1,0 +1,116 @@
+# Convo in production: the app (API, Socket.IO and the built frontend in one
+# image) and its MongoDB, behind the Traefik that apexcore runs on the VPS.
+# deploy.sh copies this file to ~/apps/convo on the server; the secrets come from
+# the .env next to it (see .env.production.example).
+# Not "convo": that is the development compose project, whose MongoDB this
+# file would otherwise take over on a developer's machine.
+name: convo-prod
+
+services:
+  app:
+    image: convo:latest
+    container_name: convo-app
+    restart: unless-stopped
+    # Only what the app needs; the database passwords stay with MongoDB.
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      CLIENT_URL: https://${CONVO_DOMAIN:-convo.deezby.pl}
+      DATABASE_URL: mongodb://convo:${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in .env}@mongo:27017/convo?authSource=convo
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY in .env}
+      EMAIL_FROM: ${EMAIL_FROM:-no-reply@convo.deezby.pl}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Convo}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_TO_FILES: "false"
+      STORAGE_DRIVER: local
+      UPLOAD_DIR: /app/backend/uploads
+    volumes:
+      - uploads:/app/backend/uploads
+    depends_on:
+      mongo:
+        condition: service_healthy
+    # Socket.IO connections get time to close on a redeploy.
+    stop_grace_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=apexcore-network"
+      - "traefik.http.routers.convo.rule=Host(`${CONVO_DOMAIN:-convo.deezby.pl}`)"
+      - "traefik.http.routers.convo.entrypoints=websecure"
+      - "traefik.http.routers.convo.tls.certresolver=${CONVO_CERT_RESOLVER:-letsencrypt}"
+      - "traefik.http.routers.convo.middlewares=security-headers@file"
+      - "traefik.http.routers.convo.service=convo"
+      - "traefik.http.routers.convo-http.rule=Host(`${CONVO_DOMAIN:-convo.deezby.pl}`)"
+      - "traefik.http.routers.convo-http.entrypoints=web"
+      - "traefik.http.routers.convo-http.middlewares=redirect-to-https@file"
+      - "traefik.http.routers.convo-http.service=convo"
+      - "traefik.http.services.convo.loadbalancer.server.port=3000"
+    networks:
+      - apexcore-network
+      - internal
+
+  mongo:
+    image: mongo:7.0
+    container_name: convo-db
+    restart: unless-stopped
+    # A small cache: the VPS is shared with other apps.
+    command: ["--wiredTigerCacheSizeGB", "0.25"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: convo
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in .env}
+    configs:
+      - source: create-app-user
+        target: /docker-entrypoint-initdb.d/create-app-user.js
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging: *logging
+    # Reachable only from the app: no published port, no Traefik.
+    networks:
+      - internal
+
+configs:
+  # Runs once, when the database folder is still empty. The app signs in as
+  # this user, which can only read and write the convo database.
+  create-app-user:
+    content: |
+      db.getSiblingDB("convo").createUser({
+        user: "convo",
+        pwd: process.env.MONGO_APP_PASSWORD,
+        roles: [{ role: "readWrite", db: "convo" }],
+      });
+
+volumes:
+  # Fixed names, so backups and restores don't depend on the project name.
+  mongo-data:
+    name: convo-mongo-data
+  uploads:
+    name: convo-uploads
+
+networks:
+  apexcore-network:
+    external: true
+  internal:
+    name: convo-internal
+    internal: true

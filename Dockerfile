@@ -39,6 +39,11 @@ COPY backend .
 # Copy built frontend into public directory to be served by Express
 COPY --from=frontend-build /app/frontend/dist ./public
 
+# Runs as the image's unprivileged user. It owns only the folder for uploaded
+# files (a volume in production takes this folder's owner) and the log folder.
+RUN mkdir -p uploads logs && chown node:node uploads logs
+USER node
+
 EXPOSE 3000
 # Which build this is, shown in Settings and by /healthz (deploy.sh passes
 # them; without, the version comes from package.json). Declared after the

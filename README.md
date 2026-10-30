@@ -132,6 +132,11 @@ Convo has one version for the whole app (root, backend and frontend `package.jso
 
 The API is versioned separately in its paths (`/api/v1/...`). A running server reports its build at `/healthz` and in the `X-App-Version` header; Settings › About shows both the app's and the server's version, and an open tab offers a reload when they differ.
 
+## Deployment
+
+Production runs as containers on a VPS behind Traefik; see
+[DEPLOYMENT.md](DEPLOYMENT.md) for the setup, secrets, backups and restores.
+
 ## Measuring frontend performance
 
 Run Lighthouse against the production build. The Vite development server on port 5173 includes development tooling and unminified modules, so its scores are not a production performance baseline.
