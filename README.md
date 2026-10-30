@@ -1,211 +1,208 @@
+<div align="center">
+
+<img src="frontend/public/favicon.svg" width="76" alt="Convo logo">
+
 # Convo
 
-A real-time chat application monorepo.
+**Real-time, one-to-one messaging for friends.**<br>
+A full-stack portfolio project: React and TypeScript, Express and Socket.IO, MongoDB.
 
-- Backend: Node.js (Express 5), Socket.IO, MongoDB, JWT (httpOnly cookie), CSRF protection, CORS hardening, optional Redis adapter for scaling/presence, uploaded files on disk or in S3-compatible storage, optional Resend for email.
-- Frontend: React + Vite + TypeScript, Zustand for state, Tailwind, Testing with Vitest + Testing Library.
+[![Live](https://img.shields.io/badge/live-convo.deezby.pl-06b6d4?style=flat-square)](https://convo.deezby.pl)
+[![Version](https://img.shields.io/github/v/tag/xenorre/convo?style=flat-square&label=version&color=2563eb)](CHANGELOG.md)
+![Node.js 24](https://img.shields.io/badge/Node.js-24-5fa04e?style=flat-square&logo=nodedotjs&logoColor=white)
+![React 19](https://img.shields.io/badge/React-19-149eca?style=flat-square&logo=react&logoColor=white)
+![TypeScript 6](https://img.shields.io/badge/TypeScript-6-3178c6?style=flat-square&logo=typescript&logoColor=white)
+![MongoDB 7](https://img.shields.io/badge/MongoDB-7-47a248?style=flat-square&logo=mongodb&logoColor=white)
+![License: ISC](https://img.shields.io/badge/license-ISC-64748b?style=flat-square)
 
-## Requirements
+[**Open the app**](https://convo.deezby.pl) · [Changelog](CHANGELOG.md) · [Deployment](DEPLOYMENT.md) · [Backend](backend/README.md) · [Frontend](frontend/README.md)
 
-- Node.js >= 24 (current LTS)
-- MongoDB (local or remote)
-- Redis (optional; enables Socket.IO scaling + presence)
-- Docker & Docker Compose (optional, for containerized dev/prod)
+<br>
 
-## Quick Start
+<img src="docs/screenshots/chat.webp" alt="A conversation in Convo: a shared photo, read receipts and the other person typing" width="900">
 
-Choose one of the flows below.
+</div>
 
-### A) Local development
+## ✨ Features
 
-1) Backend
+| Area | What you get |
+| --- | --- |
+| 💬 **Messaging** | Messages and photos arrive instantly, with typing indicators, online status and read receipts. Edit a message for 15 minutes, delete it for yourself or for everyone. Older history loads as you scroll up. |
+| 👥 **Friends** | Search people, send and accept friend requests, block anyone. |
+| 🗂️ **Chats** | Search, mute, hide or delete conversations; unread badges everywhere. |
+| 🔒 **Privacy** | Choose who can message you and send you requests, hide your online status, turn read receipts off (for both sides). |
+| 🛡️ **Accounts** | Email confirmation, password reset by email, email change with a confirmation link, one active session, passwords checked for strength and against known data breaches. |
+| 📦 **Your data** | Download everything as JSON or delete the account at any time. |
+| 🚀 **Releases** | The app shows its version and offers a reload when a newer one is deployed. |
+
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/friends.webp" alt="Friends list with a pending friend request"></td>
+    <td width="50%"><img src="docs/screenshots/privacy.webp" alt="Privacy settings"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Friends and requests, grouped by who's online</sub></td>
+    <td align="center"><sub>Privacy settings</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/sign-in.webp" alt="Sign-in screen"></td>
+    <td align="center"><img src="docs/screenshots/mobile-chat.webp" alt="A conversation on a phone" width="190"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Sign-in</sub></td>
+    <td align="center"><sub>On a phone</sub></td>
+  </tr>
+</table>
+
+## 🧱 Tech stack
+
+| Layer | Built with |
+| --- | --- |
+| **Frontend** | React 19, TypeScript 6, Vite 8, Tailwind CSS 4, Zustand 5, React Router 8 |
+| **Backend** | Node.js 24, Express 5, Socket.IO 4, Mongoose 9 (MongoDB 7), zod 4 |
+| **Email** | Resend |
+| **Tests** | Vitest and Testing Library; node:test, with integration tests on a real, throwaway MongoDB |
+| **Production** | One Docker image behind Traefik on a VPS, a MongoDB container, daily backups |
+
+## 🏗️ Architecture
+
+- **Backend** ([backend/src](backend/src)): [server.js](backend/src/server.js) connects to MongoDB, starts HTTP and Socket.IO, runs data migrations and shuts down gracefully. [app.js](backend/src/app.js) wires Helmet, CORS, CSRF, request IDs, logging, `/healthz`, `/readyz`, uploaded files under `/uploads` and the routes under `/api/v1` (`/auth`, `/users`, `/messages`, `/friends`); in production it also serves the built frontend. [config/socket.js](backend/src/config/socket.js) runs Socket.IO with one room per user, presence and typing, and the Redis adapter when `REDIS_URL` is set. Requests go routes → controllers → services → Mongoose models, validated with zod.
+- **Frontend** ([frontend/src](frontend/src)): React pages and components, state in Zustand stores. [services/apiService.ts](frontend/src/services/apiService.ts) is axios with cookies and the CSRF header against `/api/v1`.
+
+## 🚀 Getting started
+
+You need Node.js 24 and MongoDB 7. Redis is optional; it lets several backend instances share Socket.IO.
 
 ```bash
-# From repo root
-cp backend/.env.example backend/.env
-# Edit backend/.env and set at least:
-# DATABASE_URL=mongodb://localhost:27017/convo
-# JWT_SECRET=change_me
+# MongoDB, if you don't have one running
+docker run -d --name convo-mongo -p 27017:27017 mongo:7
 
+# Backend on http://localhost:3000
+cp backend/.env.example backend/.env    # set at least JWT_SECRET
 npm install --prefix backend
 npm run dev --prefix backend
-# Backend on http://localhost:3000
-```
 
-2) Frontend
-
-```bash
-# In another terminal
+# Frontend on http://localhost:5173 (another terminal)
 npm install --prefix frontend
 npm run dev --prefix frontend
-# Frontend on http://localhost:5173
 ```
 
-Frontend defaults to:
-- API base: http://localhost:3000/api
-- WebSocket origin: http://localhost:3000
+> [!TIP]
+> Without `RESEND_API_KEY`, development doesn't send emails: the backend logs each one, links included, so sign-up confirmation and password resets work locally. Uploaded photos land in `backend/uploads`.
 
-To change, set VITE_API_URL and VITE_WS_URL (see frontend/.env.example).
+**With Docker instead:** `docker compose -f docker-compose.dev.yml up --build` runs the same setup with hot reload, MongoDB and Redis; `docker compose -f docker-compose.fullstack.yml up -d --build` (with `JWT_SECRET` set) is production-like, all on http://localhost:8080.
 
-### B) Docker (dev, hot-reload)
+### Configuration
+
+The backend validates its environment at startup ([env.js](backend/src/config/env.js)); every variable is described in [backend/.env.example](backend/.env.example).
+
+- **Required:** `DATABASE_URL`, `JWT_SECRET`, and `CLIENT_URL` in production.
+- **Optional:** `RESEND_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME`, `REDIS_URL`, `STORAGE_DRIVER` and `UPLOAD_DIR` (or `STORAGE_*` for S3), `LOG_*`.
+
+The frontend reads `VITE_API_URL` (default `http://localhost:3000/api`) and `VITE_WS_URL` (default `http://localhost:3000`) from [frontend/.env.example](frontend/.env.example); in production both default to the page's own origin.
+
+## ✅ Tests and checks
 
 ```bash
-docker compose -f docker-compose.dev.yml up --build
-# Frontend: http://localhost:5173
-# Backend:  http://localhost:3000
+npm test --prefix backend                 # unit, then integration against a throwaway MongoDB
+npm run test:run --prefix frontend        # all frontend tests once (npm test watches)
+npm run lint --prefix frontend
+npm run type-check --prefix frontend
 ```
 
-Notes:
-- CSRF and cookies work cross-origin in dev via backend CORS allowlist and frontend axios withCredentials.
-- If port 5173 is taken, change the port mapping and set CLIENT_URL accordingly in backend env.
+`./deploy.sh` runs the tests, lint and `npm audit` before every deploy.
 
-### C) Docker (single-host, same-origin)
+## 🏷️ Versions and releases
 
-This runs Nginx for the frontend and proxies /api and /socket.io to the backend, which simplifies CSRF and cookies (same-site).
+One version for the whole app (root, backend and frontend `package.json` move together) and a [changelog](CHANGELOG.md) generated from Conventional Commits.
 
-```bash
-export JWT_SECRET=your_secret
-docker compose -f docker-compose.fullstack.yml up -d --build
-# Open http://localhost:8080
-```
+| To | Run |
+| --- | --- |
+| Preview the next release | `npm run release:dry-run` |
+| Release (feat → minor, fix → patch, `feat!` → major) | `npm run release` |
+| Publish the tag | `git push --follow-tags` |
 
-## Environment
+The API is versioned in its paths (`/api/v1/...`). A running server reports its build at `/healthz` and in the `X-App-Version` header; Settings › About shows both versions, and an open tab offers a reload when they differ.
 
-Backend (validated at startup):
-- Required: DATABASE_URL, JWT_SECRET
-- Optional: CLIENT_URL (required in production), REDIS_URL, EMAIL_FROM/EMAIL_FROM_NAME, RESEND_API_KEY, STORAGE_DRIVER/UPLOAD_DIR/STORAGE_*, LOG_*
-- See backend/.env.example and backend/src/config/env.js
+## 🌍 Deployment
 
-Frontend (Vite variables):
-- VITE_API_URL (default http://localhost:3000/api)
-- VITE_WS_URL (default http://localhost:3000)
-- See frontend/.env.example and frontend/src/config/env.ts
+Production runs as containers on a VPS behind Traefik, deployed with `./deploy.sh` (or `make deploy`): checks, an amd64 image stamped with the version and commit, `compose up --wait`, and an automatic return to the previous version if the new one isn't healthy. [DEPLOYMENT.md](DEPLOYMENT.md) covers the setup, secrets, going back by hand, backups and restores.
 
-## Scripts & Commands
+## 🔐 Security notes
 
-- Backend
-  - Dev (watch): `npm run dev --prefix backend`
-  - Start: `npm start --prefix backend`
-  - Health check: `npm run health --prefix backend`
-  - Docker helpers: `npm run docker:build|docker:run|compose:up --prefix backend` (ensure matching files exist)
+- **Sessions:** a JWT in an httpOnly cookie; signing in elsewhere ends the earlier session. In production the cookie is `Secure`, so HTTPS is required.
+- **CSRF:** the backend sets a readable `csrfToken` cookie; every POST/PUT/PATCH/DELETE must send it back in the `x-csrf-token` header.
+- **CORS and WebSockets:** Socket.IO follows the same origin allowlist as HTTP.
+- **Uploads:** at most 2 MB; the stored name's extension comes from the checked file type, and files are served with a sandboxing Content-Security-Policy.
 
-- Frontend
-  - Dev: `npm run dev --prefix frontend`
-  - Build: `npm run build --prefix frontend`
-  - Preview: `npm run preview --prefix frontend`
-  - Lint: `npm run lint --prefix frontend`
-  - Fix: `npm run lint:fix --prefix frontend`
-  - Type-check: `npm run type-check --prefix frontend`
-  - Backend tests: `npm test --prefix backend` (unit, then integration against a throwaway MongoDB)
-  - Tests (Vitest):
-    - All: `npm test --prefix frontend`
-    - Watch: `npm run test:watch --prefix frontend`
-    - Coverage: `npm run test:coverage --prefix frontend`
-    - Single file: `npm run test:run --prefix frontend -- src/path/to/Your.test.tsx`
+<details>
+<summary><b>📈 Measuring frontend performance</b></summary>
 
-- Makefile (shortcuts)
-  - `make dev` — dev stack (compose)
-  - `make build-fullstack` / `make up-fullstack` / `make down-fullstack`
-  - `make deploy` — production deploy (see [DEPLOYMENT.md](DEPLOYMENT.md))
+<br>
 
-## Versions and releases
-
-Convo has one version for the whole app (root, backend and frontend `package.json` move together) and a changelog generated from Conventional Commits.
-
-- See what the next release would be, changing nothing: `npm run release:dry-run`
-- First release (keeps 1.0.0, writes `CHANGELOG.md`, tags `v1.0.0`): `npm run release:first`
-- Every release after that: `npm run release` (feat → minor, fix → patch, `feat!`/`BREAKING CHANGE` → major)
-- Then publish the tag: `git push --follow-tags`
-
-The API is versioned separately in its paths (`/api/v1/...`). A running server reports its build at `/healthz` and in the `X-App-Version` header; Settings › About shows both the app's and the server's version, and an open tab offers a reload when they differ.
-
-## Deployment
-
-Production runs as containers on a VPS behind Traefik; see
-[DEPLOYMENT.md](DEPLOYMENT.md) for the setup, secrets, backups and restores.
-
-## Measuring frontend performance
-
-Run Lighthouse against the production build. The Vite development server on port 5173 includes development tooling and unminified modules, so its scores are not a production performance baseline.
-
-With the local backend running on port 3000, build and preview the frontend:
+Run Lighthouse against the production build; the Vite dev server's scores are not a baseline. With the backend on port 3000:
 
 ```bash
 VITE_API_URL=http://localhost:3000/api VITE_WS_URL=http://localhost:3000 npm run build --prefix frontend
 npm run preview --prefix frontend -- --host localhost
 ```
 
-Open `http://localhost:4173/login` and select Lighthouse's Desktop mode. Compare the same route and authentication state, keep the device settings fixed, and use the median of three runs. Compare FCP, LCP, TBT, CLS, and transferred JavaScript/CSS as well as the overall score.
+Open `http://localhost:4173/login` in Lighthouse's Desktop mode, keep the route, sign-in state and device settings fixed, and compare the median of three runs (FCP, LCP, TBT, CLS and transferred JavaScript/CSS, not just the score).
 
-Production telemetry is opt-in through `VITE_LOG_ENDPOINT`, `VITE_METRICS_ENDPOINT`, and `VITE_HEALTH_ENDPOINT`. Leave these unset unless the receiving endpoints exist; unconfigured telemetry does not generate background requests.
+Production telemetry is opt-in through `VITE_LOG_ENDPOINT`, `VITE_METRICS_ENDPOINT` and `VITE_HEALTH_ENDPOINT`; left unset, it sends nothing.
 
-## Architecture (high-level)
+</details>
 
-- Backend (backend/src)
-  - Entry: src/index.js (dotenv) -> src/server.js (env validation, MongoDB connect, start HTTP+Socket.IO, graceful shutdown)
-  - HTTP app: src/app.js (Express 5, JSON/urlencoded, cookie-parser, Helmet security headers, CORS, requestId, Morgan)
-    - CSRF: issues csrfToken cookie on safe methods; validates `x-csrf-token` on unsafe methods
-    - Health: GET /healthz; Readiness: GET /readyz (Mongo connected)
-    - Routes under /api: /auth, /users, /messages
-  - WebSockets: src/config/socket.js (Socket.IO server with optional Redis adapter for scaling + presence)
-    - Users join room `user:<id>`; broadcasts `getOnlineUsers`; emits `newMessage` to receiver room
-  - Domain: controllers, services (auth/user/storage/email), models (User/Message), middleware (auth/csrf/upload/objectId), utils (cookies/jwt/format/email)
+<details>
+<summary><b>📊 Monitoring (optional)</b></summary>
 
-- Frontend (frontend/src)
-  - Vite + React + TypeScript, Tailwind; path aliases via Vite/TS config
-  - Entry: src/main.tsx -> App.tsx; global styles in src/index.css
-  - State: Zustand stores (auth/chat)
-  - Services: axios configured with env.apiUrl (withCredentials); logging & health
-  - Components: chat list/container, headers, message input, protected route, skeletons
-  - Tests: Vitest + jsdom; setup at src/test/setup.ts
+<br>
 
-## CSRF, Cookies, and WebSockets
-
-- CSRF
-  - Backend sets a readable csrfToken cookie on safe methods (GET/HEAD)
-  - Client must echo it via `x-csrf-token` for unsafe methods (POST/PUT/PATCH/DELETE)
-- Cookies/Auth
-  - JWT in httpOnly cookie `token` (set by backend on sign-up/login)
-  - In production, cookies use `SameSite=None; Secure`, so HTTPS is required
-- WebSockets
-  - Socket.IO CORS follows the same allowlist as HTTP; in single-host/Nginx modes it’s same-origin
-
-## Monitoring (optional)
-
-Optional monitoring stack via docker-compose.monitoring.yml (Prometheus, Grafana, Loki, Promtail, cAdvisor):
+A local Prometheus, Grafana, Loki and cAdvisor stack:
 
 ```bash
 docker compose -f docker-compose.monitoring.yml up -d
-# Prometheus: http://localhost:9090
-# Grafana:    http://localhost:3001
-# Loki:       http://localhost:3100
-# cAdvisor:   http://localhost:8085
+# Prometheus :9090 · Grafana :3001 · Loki :3100 · cAdvisor :8085
 ```
 
-You can wire application metrics later (e.g., prom-client) and add scrape configs.
+</details>
 
-## Troubleshooting
+<details>
+<summary><b>🧰 Troubleshooting</b></summary>
 
-- Frontend dev container exits immediately:
-  - We use Debian-based Node for frontend in docker-compose.dev.yml to avoid SWC musl issues on Alpine.
-  - Ensure port 5173 is free, or change the port mapping and CLIENT_URL in backend env.
-- Emails disabled locally:
-  - If RESEND_API_KEY is not set, backend logs a warning and skips sending emails.
+<br>
 
-## Project Structure (top-level)
+- **Requests fail with CORS errors locally:** `CLIENT_URL` in `backend/.env` must match the address the frontend runs on, port included.
+- **Frontend dev container exits at once:** make sure port 5173 is free, or change the port mapping and `CLIENT_URL` together.
+- **No emails:** without `RESEND_API_KEY` they are only logged (development); in production the sender's domain must be verified in Resend.
+
+</details>
+
+<details>
+<summary><b>📁 Project structure</b></summary>
+
+<br>
 
 ```
 convo/
-├── backend/       # Node/Express API + Socket.IO
-├── frontend/      # React + Vite + TypeScript SPA
-├── monitoring/    # Optional Prometheus/Grafana/Loki stack
-├── docker-compose.*.yml   # dev, fullstack, monitoring; production in docker-compose.prod.yaml
-├── deploy.sh             # production deploy (DEPLOYMENT.md)
-├── scripts/              # server-side scripts (backups)
-├── Makefile
-└── WARP.md
+├── backend/                  # Express API and Socket.IO
+├── frontend/                 # React SPA
+├── docs/screenshots/         # images for this README
+├── scripts/                  # server-side scripts (backups)
+├── monitoring/               # optional Prometheus/Grafana/Loki config
+├── docker-compose.dev.yml    # local development
+├── docker-compose.fullstack.yml
+├── docker-compose.monitoring.yml
+├── docker-compose.prod.yaml  # production (DEPLOYMENT.md)
+├── Dockerfile                # the production image
+├── deploy.sh                 # deploys to the VPS
+└── Makefile
 ```
 
-## License
+</details>
+
+## 📄 License
 
 ISC
