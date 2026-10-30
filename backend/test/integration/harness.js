@@ -124,18 +124,18 @@ export const PASSWORD = "copper-lantern-meadow-58";
 // Returns a signed-in client and the account.
 export const createUser = async (app, { fullName, email, password = PASSWORD }) => {
   const client = app.client();
-  const signUp = await client.post("/api/auth/sign-up", { fullName, email, password });
+  const signUp = await client.post("/api/v1/auth/sign-up", { fullName, email, password });
   if (signUp.status !== 201) throw new Error(`Sign-up failed: ${JSON.stringify(signUp.body)}`);
-  const confirm = await client.post("/api/auth/verify-email", { token: app.lastEmailTo(email).token });
+  const confirm = await client.post("/api/v1/auth/verify-email", { token: app.lastEmailTo(email).token });
   if (confirm.status !== 200) throw new Error(`Confirming failed: ${JSON.stringify(confirm.body)}`);
   return { client, user: confirm.body.user, email, password };
 };
 
 // Makes two users friends through the friend request flow.
 export const befriend = async (a, b) => {
-  const sent = await a.client.post("/api/friends/requests", { userId: b.user._id });
+  const sent = await a.client.post("/api/v1/friends/requests", { userId: b.user._id });
   if (sent.status >= 300) throw new Error(`Friend request failed: ${JSON.stringify(sent.body)}`);
   const requestId = sent.body.request?.friendRequestId ?? sent.body.friendRequestId;
-  const accepted = await b.client.post(`/api/friends/requests/${requestId}/accept`);
+  const accepted = await b.client.post(`/api/v1/friends/requests/${requestId}/accept`);
   if (accepted.status >= 300) throw new Error(`Accepting failed: ${JSON.stringify(accepted.body)}`);
 };

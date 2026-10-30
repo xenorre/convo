@@ -28,6 +28,7 @@ vi.mock('react-hot-toast', () => ({
 vi.mock('@/config/env', () => ({
   env: {
     apiUrl: 'http://localhost:3000/api',
+    apiBaseUrl: 'http://localhost:3000/api/v1',
     wsUrl: 'http://localhost:3000',
     isDevelopment: true,
     maxMessageLength: 2000,

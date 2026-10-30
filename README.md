@@ -121,6 +121,17 @@ Frontend (Vite variables):
   - `make prod-up` / `make prod-down`
   - `make k8s-apply` / `make k8s-delete`
 
+## Versions and releases
+
+Convo has one version for the whole app (root, backend and frontend `package.json` move together) and a changelog generated from Conventional Commits.
+
+- See what the next release would be, changing nothing: `npm run release:dry-run`
+- First release (keeps 1.0.0, writes `CHANGELOG.md`, tags `v1.0.0`): `npm run release:first`
+- Every release after that: `npm run release` (feat → minor, fix → patch, `feat!`/`BREAKING CHANGE` → major)
+- Then publish the tag: `git push --follow-tags`
+
+The API is versioned separately in its paths (`/api/v1/...`). A running server reports its build at `/healthz` and in the `X-App-Version` header; Settings › About shows both the app's and the server's version, and an open tab offers a reload when they differ.
+
 ## Measuring frontend performance
 
 Run Lighthouse against the production build. The Vite development server on port 5173 includes development tooling and unminified modules, so its scores are not a production performance baseline.

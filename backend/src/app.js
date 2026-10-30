@@ -1,4 +1,5 @@
 // imports
+import { API_PREFIX, BUILD } from "#config/version.js";
 import express from "express";
 import cookieParser from "cookie-parser";
 import logger from "#config/logger.js";
@@ -46,6 +47,12 @@ app.use(helmet(securityHeaders));
 app.use(cors(corsConfig));
 
 app.use(requestId);
+// Lets an open tab notice a newer server and offer to reload.
+app.use((req, res, next) => {
+  res.set("X-App-Version", BUILD.version);
+  if (BUILD.commit) res.set("X-App-Commit", BUILD.commit);
+  next();
+});
 
 morgan.token("id", (req) => req.requestId);
 
@@ -77,18 +84,18 @@ app.get("/csrf-token", (req, res) => {
 // Enforce CSRF on unsafe methods globally
 app.use(csrfProtection);
 
-// Health and readiness endpoints
-app.get("/healthz", (req, res) => res.status(200).json({ status: "ok" }));
+// Health and readiness endpoints. /healthz also says which build is running.
+app.get("/healthz", (req, res) => res.status(200).json({ status: "ok", ...BUILD }));
 app.get("/readyz", async (req, res) => {
   const state = mongoose.connection.readyState; // 1 = connected
   return state === 1 ? res.sendStatus(200) : res.sendStatus(503);
 });
 
 // Routes
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/messages", messageRoutes);
-app.use("/api/friends", friendRoutes);
+app.use(`${API_PREFIX}/auth`, authRoutes);
+app.use(`${API_PREFIX}/users`, userRoutes);
+app.use(`${API_PREFIX}/messages`, messageRoutes);
+app.use(`${API_PREFIX}/friends`, friendRoutes);
 
 if (ENV.NODE_ENV !== "production") {
   app.get("/", (req, res) => {

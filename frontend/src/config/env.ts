@@ -14,9 +14,15 @@ const isProduction = MODE === 'production';
 const defaultApi = isProduction ? `${window.location.origin}/api` : 'http://localhost:3000/api';
 const defaultWs = isProduction ? window.location.origin : 'http://localhost:3000';
 
+// The API version this frontend speaks; VITE_API_URL stays the plain /api base.
+export const API_VERSION = 'v1';
+
+const apiUrl = getEnvVar('VITE_API_URL', defaultApi);
+
 export const env = {
   // API Configuration
-  apiUrl: getEnvVar('VITE_API_URL', defaultApi),
+  apiUrl,
+  apiBaseUrl: `${apiUrl.replace(/\/+$/, '')}/${API_VERSION}`,
   wsUrl: getEnvVar('VITE_WS_URL', defaultWs),
   
   // Environment

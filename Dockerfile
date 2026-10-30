@@ -13,6 +13,12 @@ ENV VITE_WS_URL=${VITE_WS_URL}
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend .
+# Which build this is, shown in Settings and by /healthz (deploy.sh passes
+# them; without, the version comes from package.json). Declared after the
+# dependency install so a new commit doesn't redo it.
+ARG GIT_COMMIT=
+ARG BUILD_DATE=
+ENV GIT_COMMIT=${GIT_COMMIT} BUILD_DATE=${BUILD_DATE}
 RUN npm run build
 
 # --- Install backend production deps ---
@@ -34,6 +40,12 @@ COPY backend .
 COPY --from=frontend-build /app/frontend/dist ./public
 
 EXPOSE 3000
+# Which build this is, shown in Settings and by /healthz (deploy.sh passes
+# them; without, the version comes from package.json). Declared after the
+# dependency install so a new commit doesn't redo it.
+ARG GIT_COMMIT=
+ARG BUILD_DATE=
+ENV GIT_COMMIT=${GIT_COMMIT} BUILD_DATE=${BUILD_DATE}
 # The slim image has no wget or curl, so Node itself makes the request.
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:3000/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 

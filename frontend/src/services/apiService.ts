@@ -3,6 +3,7 @@ import type { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { env } from '../config/env';
 import { logger } from './logger';
 import { redactSecrets } from '@/utils/redact';
+import { noteServerBuild } from './appVersion';
 import {
   getAuthSessionVersion,
   isCurrentAuthSession,
@@ -37,7 +38,7 @@ export class ApiService {
 
   constructor() {
     this.instance = axios.create({
-      baseURL: env.apiUrl,
+      baseURL: env.apiBaseUrl,
       withCredentials: true,
       timeout: 30000,
       headers: {
@@ -91,6 +92,7 @@ export class ApiService {
     // Response interceptor
     this.instance.interceptors.response.use(
       response => {
+        noteServerBuild(response.headers as Record<string, unknown>);
         const sessionVersion = (response.config as SessionRequestConfig)._authSessionVersion;
         if (sessionVersion !== undefined && !isCurrentAuthSession(sessionVersion)) {
           return Promise.reject(staleSessionError());
@@ -114,6 +116,7 @@ export class ApiService {
         return response;
       },
       async error => {
+        noteServerBuild(error.response?.headers as Record<string, unknown> | undefined);
         if (isSessionError(error)) return Promise.reject(error);
         const originalRequest = error.config;
         const sessionVersion = (originalRequest as SessionRequestConfig | undefined)?._authSessionVersion;

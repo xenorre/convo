@@ -13,6 +13,12 @@ ENV VITE_WS_URL=${VITE_WS_URL}
 COPY package*.json ./
 RUN npm ci
 COPY . .
+# Which build this is, shown in Settings and by /healthz (deploy.sh passes
+# them; without, the version comes from package.json). Declared after the
+# dependency install so a new commit doesn't redo it.
+ARG GIT_COMMIT=
+ARG BUILD_DATE=
+ENV GIT_COMMIT=${GIT_COMMIT} BUILD_DATE=${BUILD_DATE}
 RUN npm run build
 
 # --- Runtime stage ---

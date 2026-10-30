@@ -120,24 +120,26 @@ Base URL: http://localhost:3000
 
 Health and CSRF
 
-- GET /healthz — liveness
+- GET /healthz — liveness, plus the running build: { status, version, commit, builtAt }
 - GET /readyz — readiness (Mongo connected)
 - GET /csrf-token — returns { csrfToken }, used to set x-csrf-token header
 
-Auth (/api/auth)
+Every API route is versioned under /api/v1, and every answer carries X-App-Version (and X-App-Commit in Docker builds), which the frontend uses to offer a reload after a deploy.
+
+Auth (/api/v1/auth)
 
 - POST /sign-up — { fullName, email, password }
 - POST /login — { email, password }
 - POST /logout — ends the current session and clears its auth cookie
 - GET /check — returns current user (requires auth)
 
-Users (/api/users)
+Users (/api/v1/users)
 
 - GET /profile — current user
 - PUT /update-profile — update profile fields
 - PUT /update-profile-image — multipart/form-data field profileImage
 
-Messages (/api/messages)
+Messages (/api/v1/messages)
 
 - GET /contacts — list of users (excluding self)
 - GET /chats — chat partners derived from message history
@@ -203,7 +205,7 @@ Minimal client connect example (fetch CSRF then send):
 // Pseudo-example
 fetch('/csrf-token', { credentials: 'include' })
   .then(res => res.json())
-  .then(({ csrfToken }) => fetch('/api/messages/send/<userId>', {
+  .then(({ csrfToken }) => fetch('/api/v1/messages/send/<userId>', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
     credentials: 'include',

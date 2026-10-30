@@ -105,6 +105,8 @@ export const corsConfig = {
   
   exposedHeaders: [
     'x-request-id',
+    'x-app-version',
+    'x-app-commit',
     'x-ratelimit-limit',
     'x-ratelimit-remaining',
     'x-ratelimit-reset',

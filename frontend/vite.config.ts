@@ -12,6 +12,9 @@ const { version } = JSON.parse(readFileSync(new URL("./package.json", import.met
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
+    // Set by the Docker build (see the Dockerfile); empty in development.
+    __APP_COMMIT__: JSON.stringify(process.env.GIT_COMMIT ?? ""),
+    __APP_BUILT_AT__: JSON.stringify(process.env.BUILD_DATE ?? ""),
   },
   plugins: [
     react(), 

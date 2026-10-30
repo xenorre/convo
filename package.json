@@ -7,10 +7,16 @@
   },
   "scripts": {
     "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
-    "start": "npm run start --prefix backend"
+    "start": "npm run start --prefix backend",
+    "release": "commit-and-tag-version",
+    "release:first": "commit-and-tag-version --first-release",
+    "release:dry-run": "commit-and-tag-version --dry-run"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": ""
+  "description": "",
+  "devDependencies": {
+    "commit-and-tag-version": "^13.3.0"
+  }
 }

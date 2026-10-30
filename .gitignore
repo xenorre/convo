@@ -1,0 +1,2 @@
+# Root tooling (the release script); backend/ and frontend/ ignore their own.
+node_modules/
