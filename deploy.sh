@@ -136,14 +136,15 @@ mkdir -p -m 700 backups
 
 up() {
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up \
-    --detach --pull never --remove-orphans --wait --wait-timeout 120 "$@"
+    --detach --pull missing --remove-orphans --wait --wait-timeout 120 "$@"
 }
 running_commit() {
   docker exec convo-app node -e \
     'fetch("http://127.0.0.1:3000/healthz").then((r) => r.json()).then((b) => console.log(b.commit))' || true
 }
 
-# MongoDB is recreated only when its own settings changed.
+# MongoDB is recreated only when its own settings changed. Its image comes
+# from Docker Hub the first time; convo:latest is already here, never pulled.
 if up && [[ "$(running_commit)" == "$COMMIT" ]]; then
   :
 else
