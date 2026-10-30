@@ -1,5 +1,21 @@
 import { Check } from "lucide-react";
 
+// What Convo actually does; no numbers or promises it can't back up.
+const FEATURES = [
+  {
+    title: "Real-time messaging",
+    detail: "Messages, photos and files arrive instantly, with typing and read status",
+  },
+  {
+    title: "Privacy you control",
+    detail: "Choose who can message you, hide your online status or block anyone",
+  },
+  {
+    title: "Secure accounts",
+    detail: "Confirmed email addresses and passwords checked against known data breaches",
+  },
+];
+
 function AuthHero() {
   return (
     <div className="auth-hero relative hidden min-w-0 overflow-hidden lg:flex lg:w-1/2">
@@ -11,88 +27,36 @@ function AuthHero() {
               aria-hidden="true"
             />
             <span className="text-xs font-medium tracking-wide text-cyan-300">
-              TRUSTED BY 50,000+ USERS
+              REAL-TIME MESSAGING
             </span>
           </div>
 
           <h2 className="max-w-lg text-3xl font-semibold leading-tight tracking-tight text-white xl:text-4xl">
-            Connect with your team, anywhere
+            Stay close to the people who matter
           </h2>
 
           <p className="max-w-md text-base leading-relaxed text-slate-400 xl:text-lg">
-            Experience seamless communication with enterprise-grade security and
-            reliability.
+            Add your friends and talk one to one, the moment something happens.
           </p>
         </div>
 
-        <div className="mb-10 space-y-5">
-          <div className="flex items-start gap-3 group">
-            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 transition-colors group-hover:bg-cyan-500/20">
-              <Check className="size-3.5 text-cyan-400" aria-hidden="true" />
-            </div>
-            <div>
-              <h3 className="text-white font-medium mb-1">
-                End-to-end encryption
-              </h3>
-              <p className="text-sm text-slate-400">
-                Your conversations stay private and secure
-              </p>
-            </div>
-          </div>
+        <ul className="mb-10 space-y-5">
+          {FEATURES.map(({ title, detail }) => (
+            <li key={title} className="flex items-start gap-3 group">
+              <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 transition-colors group-hover:bg-cyan-500/20">
+                <Check className="size-3.5 text-cyan-400" aria-hidden="true" />
+              </div>
+              <div>
+                <h3 className="text-white font-medium mb-1">{title}</h3>
+                <p className="text-sm text-slate-400">{detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
 
-          <div className="flex items-start gap-3 group">
-            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 transition-colors group-hover:bg-cyan-500/20">
-              <Check className="size-3.5 text-cyan-400" aria-hidden="true" />
-            </div>
-            <div>
-              <h3 className="text-white font-medium mb-1">
-                Real-time collaboration
-              </h3>
-              <p className="text-sm text-slate-400">
-                Work together seamlessly across teams
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3 group">
-            <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 transition-colors group-hover:bg-cyan-500/20">
-              <Check className="size-3.5 text-cyan-400" aria-hidden="true" />
-            </div>
-            <div>
-              <h3 className="text-white font-medium mb-1">
-                99.9% uptime guarantee
-              </h3>
-              <p className="text-sm text-slate-400">
-                Always available when you need it
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 border-t border-slate-600/25 pt-7">
-          <div>
-            <div className="mb-1 text-2xl font-semibold tracking-tight text-white xl:text-3xl">
-              50K+
-            </div>
-            <div className="text-xs text-slate-400 xl:text-sm">
-              Active users
-            </div>
-          </div>
-
-          <div>
-            <div className="mb-1 text-2xl font-semibold tracking-tight text-white xl:text-3xl">
-              99.9%
-            </div>
-            <div className="text-xs text-slate-400 xl:text-sm">Uptime</div>
-          </div>
-
-          <div>
-            <div className="mb-1 text-2xl font-semibold tracking-tight text-white xl:text-3xl">
-              4.9★
-            </div>
-            <div className="text-xs text-slate-400 xl:text-sm">User rating</div>
-          </div>
-        </div>
+        <p className="border-t border-slate-600/25 pt-7 text-sm leading-relaxed text-slate-400">
+          Your data stays yours: download a copy or delete your account at any time.
+        </p>
       </div>
     </div>
   );
