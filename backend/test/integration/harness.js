@@ -3,12 +3,16 @@
 // file runs in its own process, so each gets its own database and its own
 // in-memory rate limits. Nothing reaches the developer's database, Resend or
 // any outside service.
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { MongoMemoryServer } from "mongodb-memory-server";
 
 const CLIENT_URL = "http://convo.test";
 
 export const startApp = async () => {
   const mongo = await MongoMemoryServer.create();
+  const uploadDir = await mkdtemp(path.join(tmpdir(), "convo-integration-uploads-"));
   Object.assign(process.env, {
     NODE_ENV: "test",
     DATABASE_URL: mongo.getUri("convo_integration"),
@@ -19,6 +23,8 @@ export const startApp = async () => {
     CLIENT_URL,
     EMAIL_FROM: "",
     EMAIL_FROM_NAME: "",
+    STORAGE_DRIVER: "local",
+    UPLOAD_DIR: uploadDir,
   });
 
   // The breached-password check would call api.pwnedpasswords.com.
@@ -51,6 +57,7 @@ export const startApp = async () => {
   return {
     base,
     emails,
+    uploadDir,
     mongoose,
     client: () => createClient(base),
     // The newest email to `to` and the token in its link.
@@ -65,6 +72,7 @@ export const startApp = async () => {
       await new Promise((resolve) => io.close(resolve));
       await mongoose.disconnect();
       await mongo.stop();
+      await rm(uploadDir, { recursive: true, force: true });
     },
   };
 };
@@ -85,17 +93,19 @@ const createClient = (base) => {
     }
   };
 
+  // A FormData body goes as a multipart upload, anything else as JSON.
   const request = async (method, path, body) => {
     if (!jar.has("csrfToken")) keepCookies(await fetch(`${base}/csrf-token`));
+    const isForm = body instanceof FormData;
     const response = await fetch(`${base}${path}`, {
       method,
       headers: {
         cookie: cookieHeader(),
         origin: CLIENT_URL,
         "x-csrf-token": jar.get("csrfToken"),
-        ...(body !== undefined && { "content-type": "application/json" }),
+        ...(body !== undefined && !isForm && { "content-type": "application/json" }),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined || isForm ? body : JSON.stringify(body),
     });
     keepCookies(response);
     const text = await response.text();

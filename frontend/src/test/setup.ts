@@ -32,7 +32,6 @@ vi.mock('@/config/env', () => ({
     wsUrl: 'http://localhost:3000',
     isDevelopment: true,
     maxMessageLength: 2000,
-    maxFileSize: 5242880,
   },
 }));
 

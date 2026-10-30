@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "#services/storage.service.js";
 
 // Validation schema for profile updates
 export const updateProfileSchema = z
@@ -24,7 +25,7 @@ export const changeEmailSchema = z.object({
 }).strict();
 
 export const FILE_VALIDATION = {
-  MAX_SIZE: 5 * 1024 * 1024, // 5MB
+  MAX_SIZE: MAX_UPLOAD_BYTES,
   ALLOWED_TYPES: ["image/jpeg", "image/jpg", "image/png", "image/webp"],
   ALLOWED_EXTENSIONS: [".jpg", ".jpeg", ".png", ".webp"],
 };
@@ -41,7 +42,7 @@ export const validateImageFile = (file) => {
   // Check file size
   if (file.size > FILE_VALIDATION.MAX_SIZE) {
     errors.push(
-      `File size must be less than ${FILE_VALIDATION.MAX_SIZE / 1024 / 1024}MB`
+      `The file must be ${MAX_UPLOAD_LABEL} or smaller`
     );
   }
 

@@ -76,8 +76,8 @@ describe('Profile settings', () => {
     await user.upload(fileInput, image('doc.pdf', 'application/pdf'));
     expect(screen.getByRole('alert')).toHaveTextContent('JPG, PNG or WebP');
 
-    await user.upload(fileInput, image('big.png', 'image/png', 5 * 1024 * 1024 + 1));
-    expect(screen.getByRole('alert')).toHaveTextContent('5 MB or smaller');
+    await user.upload(fileInput, image('big.png', 'image/png', 2 * 1024 * 1024 + 1));
+    expect(screen.getByRole('alert')).toHaveTextContent('2 MB or smaller');
     expect(apiService.uploadFile).not.toHaveBeenCalled();
   });
 

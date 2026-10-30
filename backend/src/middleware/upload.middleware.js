@@ -1,5 +1,6 @@
 import multer from "multer";
 import logger from "#config/logger.js";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "#services/storage.service.js";
 
 // File type validation
 const ALLOWED_IMAGE_TYPES = [
@@ -8,7 +9,6 @@ const ALLOWED_IMAGE_TYPES = [
   "image/png",
   "image/webp",
 ];
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 // Configure multer for memory storage with limits
 const storage = multer.memoryStorage();
@@ -31,7 +31,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: MAX_FILE_SIZE,
+    fileSize: MAX_UPLOAD_BYTES,
     files: 1, // Only allow single file upload
   },
 });
@@ -43,9 +43,7 @@ export const handleMulterError = (error, req, res, next) => {
       case "LIMIT_FILE_SIZE":
         return res.status(400).json({
           error: "File too large",
-          message: `File size must be less than ${
-            MAX_FILE_SIZE / 1024 / 1024
-          }MB`,
+          message: `The file must be ${MAX_UPLOAD_LABEL} or smaller`,
         });
       case "LIMIT_FILE_COUNT":
         return res.status(400).json({

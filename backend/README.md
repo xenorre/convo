@@ -12,7 +12,7 @@ Production-ready Node.js/Express API with MongoDB and Socket.IO for real-time me
 - CORS with environment-based allowlists and strict security headers
 - Request ID propagation and structured logging (winston + morgan)
 - MongoDB (Mongoose) models for users and messages
-- File uploads for messages/profile images (S3-compatible via AWS SDK)
+- File uploads for messages/profile images, kept on the server's disk (served under /uploads) or in an S3-compatible bucket
 - Optional Redis adapter for Socket.IO scaling and presence tracking
 - Dockerfiles and Compose for dev, fullstack, and production
 - CI workflow for Node and Docker builds
@@ -82,8 +82,10 @@ Copy .env.example to .env and fill values. Key variables:
   - PREVIEW_URL (optional)
 - Email (Resend)
   - RESEND_API_KEY, EMAIL_FROM, EMAIL_FROM_NAME
-- Storage (S3-compatible)
-  - STORAGE_URL, STORAGE_PUBLIC_URL, STORAGE_ACCESS_KEY_ID, STORAGE_SECRET_ACCESS_KEY, STORAGE_BUCKET_NAME
+- Storage
+  - STORAGE_DRIVER: `local` (files on disk, served by the app under /uploads) or `s3`; empty means s3 when STORAGE_URL is set, local otherwise
+  - UPLOAD_DIR: where `local` keeps files (default backend/uploads; mount a volume there in Docker)
+  - For `s3`: STORAGE_URL, STORAGE_PUBLIC_URL, STORAGE_ACCESS_KEY_ID, STORAGE_SECRET_ACCESS_KEY, STORAGE_BUCKET_NAME
 - Arcjet (optional)
   - ARCJET_KEY
 

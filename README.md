@@ -2,7 +2,7 @@
 
 A real-time chat application monorepo.
 
-- Backend: Node.js (Express 5), Socket.IO, MongoDB, JWT (httpOnly cookie), CSRF protection, CORS hardening, optional Redis adapter for scaling/presence, optional S3-compatible storage, optional Resend for email.
+- Backend: Node.js (Express 5), Socket.IO, MongoDB, JWT (httpOnly cookie), CSRF protection, CORS hardening, optional Redis adapter for scaling/presence, uploaded files on disk or in S3-compatible storage, optional Resend for email.
 - Frontend: React + Vite + TypeScript, Zustand for state, Tailwind, Testing with Vitest + Testing Library.
 
 ## Requirements
@@ -85,7 +85,7 @@ kubectl apply -f deploy/k8s
 
 Backend (validated at startup):
 - Required: DATABASE_URL, JWT_SECRET
-- Optional: CLIENT_URL (required in production), REDIS_URL, EMAIL_FROM/EMAIL_FROM_NAME, RESEND_API_KEY, STORAGE_*, LOG_*
+- Optional: CLIENT_URL (required in production), REDIS_URL, EMAIL_FROM/EMAIL_FROM_NAME, RESEND_API_KEY, STORAGE_DRIVER/UPLOAD_DIR/STORAGE_*, LOG_*
 - See backend/.env.example and backend/src/config/env.js
 
 Frontend (Vite variables):

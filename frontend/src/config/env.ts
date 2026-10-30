@@ -39,7 +39,6 @@ export const env = {
   // App Configuration
   appName: getEnvVar('VITE_APP_NAME', 'ConvoChat'),
   maxMessageLength: parseInt(getEnvVar('VITE_MAX_MESSAGE_LENGTH', '2000')),
-  maxFileSize: parseInt(getEnvVar('VITE_MAX_FILE_SIZE', '5242880')), // 5MB
 } as const;
 
 // Validation

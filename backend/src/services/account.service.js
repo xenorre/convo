@@ -14,6 +14,7 @@ import { comparePassword, hashPassword } from "#services/auth.service.js";
 import { sendEmail } from "#services/email.service.js";
 import { removeFile } from "#services/message.service.js";
 import { privacyOf } from "#services/privacy.service.js";
+import { absoluteFileUrl } from "#services/storage.service.js";
 import { deleteStoredProfileImage, isDefaultProfileImage } from "#services/user.service.js";
 import { createAccountDeletedEmail } from "#utils/emailTemplates.js";
 
@@ -160,7 +161,7 @@ export const buildAccountExport = async (userId, now = new Date()) => {
       email: user.email,
       createdAt: user.createdAt,
       emailConfirmedAt: user.emailVerifiedAt ?? null,
-      profilePicture: isDefaultProfileImage(user.profilePic) ? null : user.profilePic,
+      profilePicture: isDefaultProfileImage(user.profilePic) ? null : absoluteFileUrl(user.profilePic),
       privacy: privacyOf(user),
     },
     friends: friendships
@@ -189,7 +190,7 @@ export const buildAccountExport = async (userId, now = new Date()) => {
       with: person(otherOf(message, userId)),
       sentAt: message.createdAt,
       text: message.text || undefined,
-      attachment: message.image || undefined,
+      attachment: absoluteFileUrl(message.image) || undefined,
       editedAt: message.editedAt ?? undefined,
       readAt: message.readAt ?? undefined,
       deletedForEveryoneAt: message.deletedAt ?? undefined,

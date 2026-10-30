@@ -32,7 +32,9 @@ import {
 import {
   serveImmutableAssets,
   servePublicFiles,
+  serveUploads,
 } from "#src/middleware/static.middleware.js";
+import { STORAGE_DRIVER, UPLOAD_DIR, UPLOADS_PATH } from "#src/services/storage.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,6 +76,11 @@ if (ENV.NODE_ENV === "production") {
   app.use("/assets", serveImmutableAssets(publicDir));
 }
 
+// Files people uploaded, when they are kept on this server's disk.
+if (STORAGE_DRIVER === "local") {
+  app.use(UPLOADS_PATH, serveUploads(UPLOAD_DIR));
+}
+
 // CSRF token issuance for safe methods and endpoint to fetch it
 app.use(ensureCsrfTokenCookie);
 app.get("/csrf-token", (req, res) => {
@@ -106,8 +113,8 @@ if (ENV.NODE_ENV !== "production") {
 // Serve frontend in production if present
 if (ENV.NODE_ENV === "production") {
   app.use(servePublicFiles(publicDir));
-  // Match any path that does NOT start with /api or /socket.io
-  const spaFallback = /^(?!\/api|\/socket\.io).*/;
+  // Match any path that does NOT start with /api, /socket.io or /uploads
+  const spaFallback = /^(?!\/api|\/socket\.io|\/uploads).*/;
   app.get(spaFallback, (req, res) => {
     res.sendFile(path.join(publicDir, "index.html"), {
       headers: { "Cache-Control": "no-cache" },

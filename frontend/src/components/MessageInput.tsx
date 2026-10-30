@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { ImageIcon, SendIcon, XIcon } from "lucide-react";
 import { validateMessage, sanitizeInput } from "@/utils/sanitize";
 import { env } from "@/config/env";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_LABEL } from "@/utils/uploads";
 import { getAuthSessionVersion, isCurrentAuthSession } from "@/services/authSession";
 import { useTypingSignal } from "@/hooks/useTypingSignal";
 
@@ -77,10 +78,8 @@ function MessageInput() {
     }
 
     // File size validation
-    if (file.size > env.maxFileSize) {
-      toast.error(
-        `Image size must be less than ${Math.round(env.maxFileSize / 1024 / 1024)}MB`,
-      );
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.error(`The image must be ${MAX_UPLOAD_LABEL} or smaller`);
       return;
     }
 

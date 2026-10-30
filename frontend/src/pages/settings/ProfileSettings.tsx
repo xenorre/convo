@@ -7,6 +7,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import type { ProfileResponse } from "@/types/api";
 import { handleStoreError } from "@/utils/errorHandling";
 import { isDefaultAvatar, validateAvatarFile } from "@/utils/avatar";
+import { MAX_UPLOAD_LABEL } from "@/utils/uploads";
 import {
   primaryButtonClass,
   secondaryButtonClass,
@@ -84,7 +85,7 @@ function PhotoCard() {
   };
 
   return (
-    <SettingsCard title="Profile photo" description="JPG, PNG or WebP, up to 5 MB.">
+    <SettingsCard title="Profile photo" description={`JPG, PNG or WebP, up to ${MAX_UPLOAD_LABEL}.`}>
       <div className="flex flex-wrap items-center gap-4">
         <div className="relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-700/70 ring-1 ring-slate-600/40">
           {photo ? (

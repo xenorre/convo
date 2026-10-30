@@ -15,6 +15,9 @@ const EnvSchema = z.object({
   EMAIL_FROM_NAME: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   CLIENT_URL: z.string().url().optional(),
+  // An empty value means "not chosen", like leaving it out.
+  STORAGE_DRIVER: z.preprocess((value) => value || undefined, z.enum(["local", "s3"]).optional()),
+  UPLOAD_DIR: z.string().optional(),
   STORAGE_URL: z.string().optional(),
   STORAGE_PUBLIC_URL: z.string().optional(),
   STORAGE_ACCESS_KEY_ID: z.string().optional(),
@@ -52,6 +55,8 @@ export const ENV = {
   EMAIL_FROM_NAME: env.EMAIL_FROM_NAME,
   RESEND_API_KEY: env.RESEND_API_KEY,
   CLIENT_URL: env.CLIENT_URL,
+  STORAGE_DRIVER: env.STORAGE_DRIVER,
+  UPLOAD_DIR: env.UPLOAD_DIR,
   STORAGE_URL: env.STORAGE_URL,
   STORAGE_PUBLIC_URL: env.STORAGE_PUBLIC_URL,
   STORAGE_ACCESS_KEY_ID: env.STORAGE_ACCESS_KEY_ID,
